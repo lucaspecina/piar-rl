@@ -216,3 +216,12 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# PIAR — experiments outputs (artefactos pesados, no versionados)
+experiments/*/
+!experiments/README.md
+!experiments/.gitkeep
+results/
+
+# Local Claude Code config
+.claude/settings.local.json
