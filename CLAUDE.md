@@ -53,12 +53,17 @@ de implementación, el plan tentativo es:
 
 ## Tech stack
 
-Aún no commiteado a librerías específicas. Cuando se concrete:
+Decisión operativa al 2026-05-04 (ver análisis completo en
+[`research/notes/repos-mapping.md`](research/notes/repos-mapping.md) y trazabilidad en [#11](https://github.com/lucaspecina/piar-rl/issues/11)):
 
-- **verl** — RL framework de ByteDance, base de iStar (GRPO/PPO/DPO out of the box).
+- **[`prime-rl`](https://github.com/PrimeIntellect-ai/prime-rl)** (Prime Intellect, Apache-2.0) — framework de RL agentic asincrónico. FSDP2 + vLLM + multi-turn nativo. Heredado de SREG.
+- **[`verifiers`](https://github.com/PrimeIntellect-ai/verifiers)** (Prime Intellect, MIT) — librería de environments + rubrics. Define el harness, dataset y reward function.
 - **PyTorch** — base obvia.
-- **vLLM** — sampling rápido para rollouts.
-- **transformers / TRL** — alternativas / complementos.
+- **vLLM** — sampling rápido para rollouts (integrado en prime-rl).
+
+**Plan B documentado:** `verl` (ByteDance) si por alguna razón prime-rl no encaja
+para PIAR. **Plan C parked:** contactar autores iStar para acceso temprano al
+código (su repo no está liberado al 2026-05).
 
 ## Project structure
 
