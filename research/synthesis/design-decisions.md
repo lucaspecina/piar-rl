@@ -59,6 +59,7 @@
 | D.3 | **Replicar baseline iStar (RLOO + iStar) en WebShop** antes de modificar para PIAR. Hyperparameters conocidos (`paper-istar.md` §6). Sin baseline reproducido las comparaciones son ruido. | ➡️ Inclinada | Invariante 2 de PROJECT.md ("replicar antes de modificar") + iStar (`paper-istar.md` §10.3): código liberado, scripts ejecutables, hyperparams conocidos. Esto define la fase 3 del roadmap. | fase 3 (pendiente issues concretos) |
 | D.4 | **Benchmark primario: WebShop**. Estándar de agentic RL. Después al menos un segundo (ALFWorld o SOTOPIA) para argumentar generalidad. | ➡️ Inclinada | `PROJECT.md` "Lo que PIAR quiere lograr" + iStar lo usa como primer benchmark. | (roadmap, fases 5-6) |
 | D.5 | **Loggear distribución de longitudes de spans de acción ReAct** y considerar **length normalization** ($1/L$ por span) si hay alta varianza. | ➡️ Inclinada (2026-05-07) | SWEET-RL ablation crítica (`paper-sweet-rl.md` §6, §10.1): sin normalización $1/L$, el método colapsa de 40.4% → 3.6% Backend Success. Si los spans en PIAR varían mucho de longitud, sin normalización las acciones largas dominan el reward de forma trivial. **Antes de implementar PIAR, loggear longitudes; decidir data-driven si normalizar.** | [#7](https://github.com/lucaspecina/piar-rl/issues/7) |
+| D.6 | **Accuracy filtering en rollout selection** (estilo PRIME): filtrar prompts donde todos los rollouts comparten outcome (todos correctos o todos incorrectos). Considerar como candidato si la varianza inicial de PIAR resulta problemática. | 🟡 Candidata | PRIME (`paper-prime.md` §6, §10.2): reporta ~35% mejor estabilidad con accuracy filtering en su PRM update. **Menos crítico para PIAR** que para PRIME (PIAR tiene reward denso y no depende de varianza de outcome para gradiente), pero útil si exploramos updates del teacher o si la varianza empírica resulta baja. **No inclinar todavía**: implementar PIAR sin filtering primero; agregarlo solo si hace falta. | [#6](https://github.com/lucaspecina/piar-rl/issues/6) |
 
 ---
 
@@ -72,6 +73,7 @@
 | E.4 | ¿Hace falta **pointwise clipping estilo OPSD** en PIAR multi-turn span-level? | Decisión data-driven después de D.2 (loggear contribuciones por tipo de token). |
 | E.5 | ¿El **teacher de PIAR como evaluador** sirve también como **teacher para policy improvement**? Yuan advierte que un buen PRM no implica buen policy (PRM evaluador ≠ buen actor). | Diagnóstico cuando arranquen experimentos de policy update. |
 | E.6 | **Plan A (prime-rl) vs Plan B (veRL fork iStar)** — ¿se mantiene Plan A o se cambia? | Decisión al iniciar fase 4 después de leer el código de iStar como referencia. |
+| E.7 | **¿El teacher frozen de PIAR degrada con steps de RL** si el policy se aleja del SFT inicial? PRIME muestra que un PRM con loss CE outcome sí degrada; el teacher de PIAR mide un objeto distinto (delta context-induced) y en principio es estable, pero merece verificación empírica. ¿Hace falta re-snapshot del teacher cada N steps? | Métrica simple: durante RL training, comparar correlación de $r_{\text{PIAR}}^t$ con outcome a step 0 vs step N. Si decae → re-snapshot. Si se mantiene → C.2 cierra como sólida. |
 
 ---
 
@@ -93,7 +95,7 @@
 | iStar — agentic RL multi-turn | [`paper-istar.md`](../notes/paper-istar.md) | [#4](https://github.com/lucaspecina/piar-rl/issues/4) ✅ | Action-level + advantage-level normalization. β=0.05, α=1, sin KL penalty. Código liberado (ICLR 2026). |
 | OPSD — privileged-context teacher | [`paper-opsd.md`](../notes/paper-opsd.md) | [#5](https://github.com/lucaspecina/piar-rl/issues/5) ✅ | Same-model + golden context funciona. Teacher frozen al checkpoint inicial. Template del prompt. Riesgo leakage no analizado. |
 | SWEET-RL — asymmetric critic | [`paper-sweet-rl.md`](../notes/paper-sweet-rl.md) | [#7](https://github.com/lucaspecina/piar-rl/issues/7) ✅ | Privileged training-time info en critic separado entrenado con BT. La línea de la que PIAR se diferencia. Length norm crítica (sin ella collapse). +9.2% atribuible a privileged info en ablation. Código liberado. |
-| PRIME (pendiente) | — | [#6](https://github.com/lucaspecina/piar-rl/issues/6) ⏳ | — |
+| PRIME — RL framework con implicit PRM | [`paper-prime.md`](../notes/paper-prime.md) | [#6](https://github.com/lucaspecina/piar-rl/issues/6) ✅ | Framework reference: implicit PRM de Yuan + online update con CE + combinación con outcome via LOO baseline. Plantilla de pipeline para PIAR. Confirma β=0.05 y KL=0 como defaults. Dispara D.6 (accuracy filtering candidato) y E.7 (¿teacher degrada?). |
 | Math-Shepherd (pendiente) | — | [#8](https://github.com/lucaspecina/piar-rl/issues/8) ⏳ | — |
 | π-Distill (pendiente) | — | [#10](https://github.com/lucaspecina/piar-rl/issues/10) ⏳ | — |
 | Síntesis cruzada (pendiente) | — | [#9](https://github.com/lucaspecina/piar-rl/issues/9) ⏳ | Cierre del epic. |
