@@ -8,9 +8,9 @@ Research project sobre RL para LLM agents. Propone usar el log-ratio entre un te
 |---|---|---|
 | 0 — Bootstrap | Estructura + tracking + memoria | ✅ Done |
 | 1 — Research | Síntesis cruzada de papers vecinos | 🟡 Now |
-| 2 — Decisión de framework | verl vs alternativas + Azure ML | ⏳ Next |
+| 2 — Setup de compute | Stack decidido (prime-rl + verifiers); falta Azure ML setup | ⏳ Next |
 | 3 — Replicación de baseline | iStar baseline en WebShop | ⏳ |
-| 4 — Implementación PIAR | Modificación quirúrgica (~50–200 líneas) | ⏳ |
+| 4 — Implementación PIAR | Modificación quirúrgica (~80–250 líneas) | ⏳ |
 | 5 — Comparación + ablations | PIAR vs baseline + ablations clave | ⏳ |
 | 6 — 2do benchmark + redacción | ALFWorld/SOTOPIA + draft | ⏳ |
 | 7 — Caso de estudio SREG | SCM como info privilegiada (opcional) | ⏳ |
@@ -25,7 +25,9 @@ Research project sobre RL para LLM agents. Propone usar el log-ratio entre un te
 | Workflow operativo de tracking | [`.claude/skills/tracking/SKILL.md`](.claude/skills/tracking/SKILL.md) |
 | Roadmap y trabajo pendiente | [Project v2 #5](https://github.com/users/lucaspecina/projects/5) · `gh issue list -R lucaspecina/piar-rl` |
 | Historial de cambios | [`CHANGELOG.md`](CHANGELOG.md) |
-| Research consolidado | [`research/synthesis/`](research/synthesis/) · [`research/notes/`](research/notes/) |
+| Decisiones de diseño | [`research/synthesis/design-decisions.md`](research/synthesis/design-decisions.md) |
+| Notas de papers | [`research/notes/`](research/notes/) |
+| Research consolidado | [`research/synthesis/`](research/synthesis/) |
 
 ## Setup
 

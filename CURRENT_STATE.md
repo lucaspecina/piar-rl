@@ -51,16 +51,16 @@ cd piar-rl
 **Foco actual: fase 1 del roadmap (research consolidado).**
 
 Epic activo: **Research — síntesis de papers vecinos a PIAR** (ver Project v2).
-Sub-issues, en orden de prioridad:
+Sub-issues:
 
-1. Yuan et al. 2024 — Implicit PRM (la base teórica).
-2. iStar (el más cercano matemáticamente — log-ratios en agentes multi-turn).
-3. OPSD / Self-Distilled Reasoner (privileged-context teacher).
-4. π-Distill (vecino conceptual).
-5. PRIME (framework completo de RL con implicit PRM).
-6. SWEET-RL (critic asimétrico privilegiado).
-7. Math-Shepherd (predecesor histórico explícito).
-8. Síntesis cruzada + delta de PIAR explícito (cierre del epic).
+1. ✅ **Yuan 2024 — Implicit PRM** (#3, cerrado 2026-05-07). Notas: [`research/notes/paper-yuan-implicit-prm.md`](research/notes/paper-yuan-implicit-prm.md).
+2. ✅ **iStar — log-ratio en agentes multi-turn** (#4, cerrado 2026-05-07). Notas: [`research/notes/paper-istar.md`](research/notes/paper-istar.md). Código liberado, ICLR 2026.
+3. ⏳ OPSD / Self-Distilled Reasoner — privileged-context teacher (#5). **Próximo.** Resuelve sub-decisión frozen vs co-evolución del invariante 4.
+4. ⏳ π-Distill — vecino conceptual (#10).
+5. ⏳ PRIME — framework completo de RL con implicit PRM (#6).
+6. ⏳ SWEET-RL — critic asimétrico privilegiado (#7).
+7. ⏳ Math-Shepherd — predecesor histórico (#8).
+8. ⏳ Síntesis cruzada + delta de PIAR explícito (#9, cierre del epic).
 
 **Criterio de cierre del epic**: cada paper tiene un doc en
 `research/notes/paper-<slug>.md` y la síntesis cruzada está en

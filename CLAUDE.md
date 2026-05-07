@@ -25,6 +25,7 @@
 |---|---|
 | Vision e invariantes | `PROJECT.md` |
 | Estado HOY del sistema | `CURRENT_STATE.md` |
+| **Decisiones de diseño + trazabilidad** | [`research/synthesis/design-decisions.md`](research/synthesis/design-decisions.md) |
 | Roadmap / trabajo pendiente | [Project v2 #5](https://github.com/users/lucaspecina/projects/5) · `gh issue list -R lucaspecina/piar-rl` |
 | Workflow de tracking (cómo crear/cerrar issues, sub-issues, etc.) | `.claude/skills/tracking/SKILL.md` + `commands.md` + `reference.md` |
 | Historial de cambios | `CHANGELOG.md` |
@@ -174,7 +175,8 @@ Después de cada cambio significativo, escanear esta tabla:
 | Cambió scope/visión | PROJECT.md primero, propagar a CLAUDE.md y al Project v2 |
 | Research deep done | `research/notes/paper-<slug>.md` + comentario en el issue |
 | Conclusión de research | `research/synthesis/` + cerrar issue con link |
-| Research → decisión | Promover a `PROJECT.md` (Invariantes o Roadmap) |
+| Research → decisión | Agregar / actualizar fila en `research/synthesis/design-decisions.md`. Si toca un invariante → propagar a `PROJECT.md`. |
+| Decisión cambia de status (abierta → inclinada → cerrada, o viceversa) | Updatear fila en `research/synthesis/design-decisions.md` con fecha + fuente. CHANGELOG con ref `#N` si fue disparada por cierre de issue. |
 | Creé/cerré epic | Actualizar tabla "Epics activos" arriba |
 
 Ver user-level `dev-workflow/doc-maintenance.md` para reglas completas y cleanup.
