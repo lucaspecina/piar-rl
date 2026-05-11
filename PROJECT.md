@@ -31,6 +31,21 @@ combinación, no inventar componentes nuevos.
 >
 > Aplicala al evaluar, diseñar, priorizar o revisar cualquier decisión.
 
+### Reformulación operativa contra iStar (2026-05-11)
+
+Misma pregunta de fondo, planteada contra el baseline experimental concreto:
+
+> **iStar codifica información privilegiada (outcome rankings) en los pesos
+> de un juez separado vía DPO. ¿Esa info puede reemplazarse por información
+> privilegiada en el contexto del mismo modelo (golden answer en el prompt),
+> produciendo igual o mejor señal per-paso con un setup más simple (sin
+> entrenar juez)?**
+
+Dos consecuencias prácticas de este reframe:
+
+- **Experimento primario = PIAR vs iStar en WebShop**, con setup intacto, cambiando solo cómo se obtiene el término privilegiado del log-ratio (pesos del juez entrenado → prompt con golden answer del mismo modelo). Aísla "fuente de la asimetría" como única variable entre ambos sistemas.
+- **Responde también la duda interna** sobre si la info del juez de iStar es información nueva o re-codificación de outcomes (ver [`research/notes/paper-istar.md`](research/notes/paper-istar.md) §16). Si PIAR matchea o supera a iStar, era re-codificación y se puede saltar.
+
 ## Lo que PIAR quiere lograr
 
 - **Densidad de señal sin overhead**: rewards por acción sin PRM entrenado ni step labels manuales — solo dos forward passes.

@@ -19,6 +19,11 @@
 >
 > Aplicala al evaluar, diseñar, priorizar o revisar cualquier decisión.
 
+> **Reformulación operativa contra iStar (2026-05-11):** versión concreta del
+> experimento primario en [`PROJECT.md`](PROJECT.md). Aísla "fuente de la
+> asimetría" (pesos del juez entrenado en iStar vs golden en el prompt en PIAR)
+> como única variable. Ver también [`research/notes/paper-istar.md`](research/notes/paper-istar.md) §15-§16 para la explicación amigable y las dudas teóricas.
+
 ## Where to find what
 
 | Necesito... | Ir a... |

@@ -3,6 +3,14 @@
 Historial de cambios del proyecto. Cada entrada referencia el issue de GitHub
 que la motivó (formato `#N`).
 
+## 2026-05-11
+
+- **Reformulación operativa de LA PREGUNTA contra iStar** en `PROJECT.md`. Mantiene LA PREGUNTA abstracta original y agrega sub-sección concreta: "¿La info privilegiada de iStar (outcome rankings codificados en los pesos del juez vía DPO) puede reemplazarse por info privilegiada en el contexto del mismo modelo (golden answer en el prompt), produciendo igual o mejor señal per-paso con un setup más simple?". Define el experimento primario PIAR vs iStar en WebShop con setup intacto, cambiando solo la fuente del término privilegiado del log-ratio. (Refs #2, #4)
+- **Documentación amigable de iStar** en [`research/notes/paper-istar.md`](research/notes/paper-istar.md) §15: el método sin fórmulas (3 copias del SFT base, ejemplo del laberinto, DPO ≠ SFT, cómo emerge el score por acción, truco matemático de Yuan). Para futuras sesiones que necesiten releer iStar sin volver a descifrar la matemática. (Refs #4)
+- **Dudas conceptuales y debilidades teóricas de iStar** documentadas en `paper-istar.md` §16: (1) el juez no es un jugador competente, solo provee señal per-paso; (2) la info del juez es re-codificación de outcomes, no info nueva; (3) los propios autores reconocen que separar PRM del policy es opcional, no necesario; (4) el teorema de Yuan tiene supuestos no blindados empíricamente. Implicaciones para PIAR: la apuesta es más fuerte que lo que iStar reconoce como abierto — además de unificar PRM+policy, reemplaza el entrenamiento por info en el prompt. Tres riesgos específicos enumerados (leakage textual, info demasiado densa, dependencia del golden definido). (Refs #4)
+- **CLAUDE.md actualizado**: puntero desde "LA PREGUNTA" hacia la reformulación operativa en `PROJECT.md` y hacia `paper-istar.md` §15-§16.
+- **Repo `CharacterRL-iStar` verificado operacionalmente**: estructura completa con 7 trainers ejecutables (iStar, RLOO, GRPO, REINFORCE++, PPO, GiGPO, PRIME) en WebShop + Sokoban. Modelo base Qwen2.5-7B-Instruct. Hardware target 8×H100/A100 (compatible con Y-TEC). Framework veRL (fork de Alibaba). Hyperparams loggeados en los scripts. Refuerza viabilidad del Plan B (#11) si se reabre la decisión de framework.
+
 ## 2026-05-07
 
 - **Research — Yuan 2024 (Implicit PRM) consolidado** en [`research/notes/paper-yuan-implicit-prm.md`](research/notes/paper-yuan-implicit-prm.md). Insight clave: Proposition 3.1 es identidad algebraica de soft-Q (vale para cualquier par de distribuciones autoregresivas, no requiere training). Aplicada a PIAR, $r_{\text{PIAR}}$ es soft-Q válida del reward "cuánto racionaliza el contexto golden esta trayectoria"; el gap con un PRM clásico es **semántico**, no matemático. (#3 cerrado)

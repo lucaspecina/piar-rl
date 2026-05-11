@@ -197,3 +197,122 @@ Acción concreta cuando arranque fase de código: clonar [`CharacterRL-iStar`](h
 3. **iStar es lo más cercano a PIAR pero no considera privileged context** → PIAR está en territorio que iStar no exploró.
 4. **Co-evolución (teacher = student actual) es el default forzado en PIAR** por invariante 4, no una elección como en iStar.
 5. **Replicar RLOO + iStar en WebShop antes de tocar PIAR** define el baseline reproducible (fase 3 del roadmap).
+
+## 15. Versión amigable — el método sin fórmulas
+
+> Esta sección existe para que la idea quede en castellano llano sin tener que descifrar la matemática cada vez. Refleja la discusión de 2026-05-11 hasta que la explicación encajó.
+
+### El setup en una imagen mental
+
+Arrancás con **un modelo de lenguaje SFT base** (Qwen2.5-7B-Instruct en WebShop) y lo **copiás 3 veces**. Las tres copias son idénticas al inicio:
+
+- 🎮 **El agente** ($\pi_\theta$). Es el que juega la tarea. Es el que vas a usar al final del training.
+- 📸 **La foto** ($\pi_{\theta_{\text{old}}}$). Una copia congelada del agente. No se entrena. Se sobreescribe con el agente actual al final de cada iteración.
+- 👨‍⚖️ **El juez** ($\pi_\phi$, el "PRM"). Otra copia, que vas a entrenar aparte con un objetivo distinto al del agente.
+
+Como arrancan idénticos, al principio los tres dicen lo mismo. Lo que los hace divergir es cómo se entrena cada uno.
+
+### Qué es el juez y qué aprende
+
+**El juez NO es un clasificador. NO predice un score numérico. NO da una etiqueta "buena/mala".** Sigue siendo un LLM normal — predice qué token (qué acción) viene siguiente, igual que el agente.
+
+Lo que cambia con el entrenamiento es que sus probabilidades de "qué jugada haría yo" están sutilmente **sesgadas hacia el estilo de las partidas ganadoras**.
+
+### Cómo se entrena el juez (DPO trayectorial)
+
+Le mostrás pares de partidas enteras:
+- **Partida A** (ganadora): arriba → arriba → derecha → ¡salida! 🎉
+- **Partida B** (perdedora): arriba → derecha → trampa 💀
+
+Y ajustás sus pesos para que **la secuencia entera de A le resulte más probable**, y la secuencia entera de B menos probable. Eso es DPO. Es lo mismo que se usó para entrenar ChatGPT con feedback humano, pero acá la "preferencia" es automática: ganó vs perdió.
+
+**El juez nunca ve la respuesta correcta.** Solo ve las partidas del agente y la etiqueta "ganó / perdió" al final.
+
+### DPO ≠ SFT
+
+- **SFT** = "Mirá esta jugada. Copiala." (Te dice qué hacer.)
+- **DPO** = "Mirá estas DOS partidas. Preferí la primera sobre la segunda." (Te enseña a comparar, no a copiar.)
+
+Después del DPO, el juez no reproduce las partidas ganadoras tal cual. Solo está **sesgado** hacia jugadas que aparecen más en ganadoras que en perdedoras.
+
+### Cómo sale el score por acción
+
+Tomás una jugada cualquiera del agente. Digamos: "el agente estaba en posición (1,1) y eligió ir arriba".
+
+Le preguntás a las dos copias:
+- **Foto**: "¿Cuánto le hubieras dado vos a 'arriba' en (1,1)?" → 0.25
+- **Juez**: "¿Cuánto le das vos a 'arriba' en (1,1)?" → 0.40
+
+**Score de esta jugada** = log(0.40) − log(0.25) ≈ 0.47 (positivo) → "esta jugada huele a estilo ganador según el juez".
+
+Si el juez le hubiera dado **menos** que la foto, el score sería negativo → "huele a estilo perdedor".
+
+### El loop completo
+
+Por cada iteración:
+1. El agente juega N partidas.
+2. Outcome verifier dice cuáles ganaron y cuáles perdieron.
+3. Formás pares (ganadora, perdedora).
+4. Actualizás el juez con DPO sobre esos pares.
+5. Para cada acción del agente, computás score = log P(acción | juez) − log P(acción | foto).
+6. Combinás ese score con el resultado final (outcome reward) y actualizás al agente.
+7. Foto ← agente actual. Volvés al paso 1.
+
+### El truco matemático que hace que esto funcione (Yuan 2024)
+
+¿Por qué entrenar al juez sobre **trayectorias enteras** te da scores por **acción individual**?
+
+Porque las trayectorias son producto de probabilidades paso a paso ($\pi(\tau) = \prod_t \pi(a_t \mid h_t)$). Cuando hacés DPO para empujar P(ganadora) arriba y P(perdedora) abajo, el gradiente se distribuye sobre las acciones individuales que componen esas trayectorias. Yuan demuestra que el log-ratio resultante en cada paso **es matemáticamente una función-Q válida** para el reward implícito definido por las preferencias.
+
+No es heurística. Es un teorema (con sus supuestos — ver §16 sobre limitaciones).
+
+## 16. Dudas conceptuales y debilidades teóricas
+
+> Documentadas el 2026-05-11. Estas dudas emergieron de discusión interna y son legítimas. No invalidan iStar — funciona empíricamente. Pero matizan qué tan robusta es su justificación teórica y abren preguntas que PIAR debería responder.
+
+### 16.1 El juez no es un buen jugador
+
+Si tomaras al juez y lo usaras para jugar el laberinto, **jugaría peor que el agente**.
+
+Razones:
+1. **DPO sobre pocos pares no produce un generador fuerte.** Es bueno **comparando** trayectorias, no **generándolas**. Es más parecido a un discriminador que a un policy entrenado para maximizar reward.
+2. **El juez ve poquísimos pares por iteración** (~8 trayectorias = unos pocos pares). Suficiente para sesgar levemente sus probabilidades, no para convertirlo en un jugador competente.
+
+Por eso iStar no usa al juez como agente. Lo usa **solamente como mecanismo de scoring por paso**.
+
+### 16.2 La info del juez no es información nueva — es una re-codificación
+
+El juez ve los **mismos rollouts y los mismos outcomes** que el agente. No tiene información adicional. En el fondo, está **transformando** outcome labels en señal per-paso vía la matemática de DPO + log-ratio.
+
+Si el agente fuera lo suficientemente "data-eficiente", podría aprender lo mismo sin juez. La justificación de tener el juez es **empírica** (funciona y agrega 9 puntos en WebShop vs RLOO outcome-only), no teóricamente indispensable.
+
+### 16.3 Los propios autores dicen que separar PRM del policy es opcional
+
+iStar declara como **limitación** (§11 de estas notas): "PRM separado del policy en training — sugieren unificarlos para eficiencia de memoria".
+
+Es decir: **la separación no es teóricamente necesaria, es una elección operativa**. Hay formulaciones (incluido el paper de Yuan 2024 mismo) donde el juez y el agente son el mismo modelo.
+
+### 16.4 El teorema de Yuan tiene supuestos
+
+La descomposición trayectoria → step-rewards vía log-ratio asume:
+- Que DPO converge a algo significativo (con pocos pares por iteración, esto es dudoso).
+- Que la factorización autoregresiva del likelihood "distribuye" la preferencia de forma útil paso a paso (válido matemáticamente pero los gradientes pueden concentrarse en pocos tokens y dar señal ruidosa).
+- Que la diferencia entre $\pi_\phi$ y $\pi_{\theta_{\text{old}}}$ refleja calidad de la acción y no artefactos de cómo arrancaron y divergieron.
+
+Ninguno de estos supuestos está empíricamente blindado en iStar — funcionan en la práctica, pero no hay una prueba teórica de que tengan que funcionar.
+
+### 16.5 Lo que esto significa PARA PIAR
+
+PIAR hace **una apuesta más fuerte que la que iStar reconoce como abierta**: no solo unifica el juez con el policy (lo que iStar ya sugiere como futuro), sino que **reemplaza el aprendizaje del juez por información en el prompt**.
+
+Reformulación de la pregunta de investigación de PIAR a la luz de esto:
+
+> iStar entrena un juez separado (vía DPO sobre outcomes) para que su log-ratio contra el snapshot de a un score per-paso. La info en los pesos del juez **es una re-codificación de outcomes**. ¿Qué pasa si saltamos ese paso y le damos al mismo modelo **acceso directo a la respuesta correcta en el prompt** durante el cómputo del score? La asimetría se mueve de los pesos al contexto, y nos ahorramos todo el loop de entrenamiento del juez.
+
+Si funciona: confirma que la "info" que iStar codifica en los pesos del juez es alcanzable con un prompt-engineering más directo. Si no funciona: el juez entrenado captura algo más sutil que el prompt directo no — y entender qué es esa diferencia ya es un resultado científico.
+
+### 16.6 Riesgos específicos para PIAR (no para iStar)
+
+- **Leakage textual**: el "juez con golden en prompt" puede sesgarse hacia acciones que reproducen texto del golden literalmente, sin razonar (ya discutido en D.1 de design-decisions.md).
+- **Información demasiado densa**: el golden answer es una "info privilegiada" mucho más rica que un binary outcome label. Eso puede ser bueno (señal más informativa) o malo (más fácil de explotar trivialmente).
+- **Dependencia de tener golden**: iStar funciona en cualquier tarea con outcome verifier (incluso ambiguo, como SOTOPIA con GPT-4o). PIAR necesita una "respuesta correcta" definida, lo cual restringe el conjunto de tareas aplicables.
