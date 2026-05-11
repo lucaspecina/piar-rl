@@ -11,6 +11,23 @@ que la motivó (formato `#N`).
 - **CLAUDE.md actualizado**: puntero desde "LA PREGUNTA" hacia la reformulación operativa en `PROJECT.md` y hacia `paper-istar.md` §15-§16.
 - **Repo `CharacterRL-iStar` verificado operacionalmente**: estructura completa con 7 trainers ejecutables (iStar, RLOO, GRPO, REINFORCE++, PPO, GiGPO, PRIME) en WebShop + Sokoban. Modelo base Qwen2.5-7B-Instruct. Hardware target 8×H100/A100 (compatible con Y-TEC). Framework veRL (fork de Alibaba). Hyperparams loggeados en los scripts. Refuerza viabilidad del Plan B (#11) si se reabre la decisión de framework.
 
+### Parte 2 — post review crítico de Codex
+
+- **Tightening de la "Reformulación operativa" en `PROJECT.md`**: Codex pegó duro contra la claim de "única variable changed". Reescrita honestamente como **nearest-neighbor replacement study** con los confounds nombrados explícitamente (cantidad/tipo de info disponible, weight drift si frozen, hyperparams α/β). Agregada mención al shuffled-golden control (D.9) como sanity de leakage. (Refs #2, #4)
+- **Actualizada decisión C.2 en `design-decisions.md`**: snapshot del teacher cambia de "frozen θ₀" (decisión 2026-05-07 estilo OPSD) a **`π_old` (snapshot reciente) como primario; frozen θ₀ como ablation de estabilidad**. Razón: frozen θ₀ rompe "mismos pesos del student" (invariante 4) después del primer update (θ_0 ≠ θ_t) y mezcla efecto-contexto con weight-drift. Con `π_old` en ambos términos del log-ratio, queda **pura diferencia de prompt** como única asimetría. OPSD seguía siendo válido en single-turn KL pero la transferencia a multi-turn log-ratio no preserva el invariante. (Refs #5)
+- **Nueva decisión D.9 en `design-decisions.md`**: **shuffled-golden control como sanity de leakage existencial** (no opcional). Correr PIAR con goldens shuffleadas (de otras tareas) — si el reward o el training mejora vs outcome-only con shuffled goldens, PIAR mide answer-conditioned textual affinity, no progreso causal. Sin este control, ningún resultado positivo es defendible. Complementa a D.1 (que mide leakage a nivel muestreo pareado). (Refs #2)
+- **Actualizada E.3** para reflejar el cambio en C.2: la pregunta abierta pasa de "frozen vs co-evolución" a "`π_old` vs frozen θ₀".
+- **CURRENT_STATE.md refrescado**: lista de papers cerrados actualizada (eran 2 visibles como cerrados, ahora son 7 — los 6 restantes del epic). Mención al reframe post-iStar y a la verificación del repo `CharacterRL-iStar`.
+- **GitHub Issues restructurados post-review**:
+  - Cerrado #4 (iStar) como `completed`. Trabajo hecho, bug de tracking corregido (CHANGELOG ya lo daba cerrado, GitHub seguía abierto).
+  - Cerrado #12 (contactar autores iStar) como `completed`. Código liberado al público, criterio de cierre alcanzado sin necesidad de contacto.
+  - Retitulado #13 a "Plan A POC — log-ratio teacher-student como rubric de verifiers (step-level reward)" para clarificar que depende de la decisión Plan A vs Plan B (queda parked).
+  - Abierto **#14** (design): "Decidir Plan A (prime-rl) vs Plan B (fork CharacterRL-iStar) post-reformulación 2026-05-11".
+  - Abierto **#15** (research): "Leakage vs progreso causal — D.1 (muestreo pareado) + D.9 (shuffled-golden control)".
+  - Abierto **#16** (research, blocked): "Fase 3 — Replicar baseline iStar WebShop con CharacterRL-iStar". Bloqueado por #14 y setup de Azure ML.
+  - Todos agregados al Project v2 board en `Todo`.
+- **Codex MCP validado como segunda opinión técnica**: encontró confounds reales en la reformulación de hoy (la oversold-única-variable + la tensión C.2/invariante 4 + la falta de shuffled-golden). Todas las correcciones aplicadas.
+
 ## 2026-05-07
 
 - **Research — Yuan 2024 (Implicit PRM) consolidado** en [`research/notes/paper-yuan-implicit-prm.md`](research/notes/paper-yuan-implicit-prm.md). Insight clave: Proposition 3.1 es identidad algebraica de soft-Q (vale para cualquier par de distribuciones autoregresivas, no requiere training). Aplicada a PIAR, $r_{\text{PIAR}}$ es soft-Q válida del reward "cuánto racionaliza el contexto golden esta trayectoria"; el gap con un PRM clásico es **semántico**, no matemático. (#3 cerrado)

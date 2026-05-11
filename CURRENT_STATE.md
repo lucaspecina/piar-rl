@@ -48,27 +48,27 @@ cd piar-rl
 
 ## 3. Qué se está construyendo
 
-**Foco actual: fase 1 del roadmap (research consolidado).**
+**Foco actual: cierre de la fase 1 (research consolidado) + reformulación operativa de LA PREGUNTA contra iStar.**
 
-Epic activo: **Research — síntesis de papers vecinos a PIAR** (ver Project v2).
-Sub-issues:
+Epic activo: **Research — síntesis de papers vecinos a PIAR** (#2). Estado de sub-issues:
 
-1. ✅ **Yuan 2024 — Implicit PRM** (#3, cerrado 2026-05-07). Notas: [`research/notes/paper-yuan-implicit-prm.md`](research/notes/paper-yuan-implicit-prm.md).
-2. ✅ **iStar — log-ratio en agentes multi-turn** (#4, cerrado 2026-05-07). Notas: [`research/notes/paper-istar.md`](research/notes/paper-istar.md). Código liberado, ICLR 2026.
-3. ⏳ OPSD / Self-Distilled Reasoner — privileged-context teacher (#5). **Próximo.** Resuelve sub-decisión frozen vs co-evolución del invariante 4.
-4. ⏳ π-Distill — vecino conceptual (#10).
-5. ⏳ PRIME — framework completo de RL con implicit PRM (#6).
-6. ⏳ SWEET-RL — critic asimétrico privilegiado (#7).
-7. ⏳ Math-Shepherd — predecesor histórico (#8).
-8. ⏳ Síntesis cruzada + delta de PIAR explícito (#9, cierre del epic).
+1. ✅ **Yuan 2024 — Implicit PRM** (#3). Notas: [`paper-yuan-implicit-prm.md`](research/notes/paper-yuan-implicit-prm.md).
+2. ✅ **iStar — log-ratio en agentes multi-turn** (#4). Notas: [`paper-istar.md`](research/notes/paper-istar.md) — incluye §15 (versión amigable sin formulas) y §16 (dudas conceptuales). Código liberado, ICLR 2026.
+3. ✅ **OPSD / Self-Distilled Reasoner** (#5). Notas: [`paper-opsd.md`](research/notes/paper-opsd.md).
+4. ✅ **PRIME** (#6). Notas: [`paper-prime.md`](research/notes/paper-prime.md).
+5. ✅ **SWEET-RL** (#7). Notas: [`paper-sweet-rl.md`](research/notes/paper-sweet-rl.md).
+6. ✅ **Math-Shepherd** (#8). Notas: [`paper-math-shepherd.md`](research/notes/paper-math-shepherd.md).
+7. ✅ **π-Distill** (#10). Notas: [`paper-pi-distill.md`](research/notes/paper-pi-distill.md).
+8. ⏳ **Síntesis cruzada + delta de PIAR explícito** (#9) — único pendiente, cierre del epic.
 
-**Criterio de cierre del epic**: cada paper tiene un doc en
-`research/notes/paper-<slug>.md` y la síntesis cruzada está en
-`research/synthesis/papers-cross-mapping.md` con el delta de PIAR aislado.
+Las 9 decisiones cerradas/inclinadas y 8 controles de medición salieron consolidados en [`research/synthesis/design-decisions.md`](research/synthesis/design-decisions.md).
+
+**Reformulación operativa post-iStar (2026-05-11)**: LA PREGUNTA quedó re-anclada contra el baseline experimental concreto (PIAR vs iStar con setup intacto, cambiando solo cómo se obtiene el término privilegiado del log-ratio). Ver `PROJECT.md` "Reformulación operativa contra iStar". Documentado también en `paper-istar.md` §15-§16 (versión amigable + dudas teóricas reconocidas).
+
+**Verificación operacional del repo de iStar (2026-05-11)**: `Tongyi-ConvAI/Qwen-Character/CharacterRL-iStar` es maduro y ejecutable. 7 trainers (iStar, RLOO, GRPO, REINFORCE++, PPO, GiGPO, PRIME) × 2 environments (WebShop, Sokoban). Modelo base Qwen2.5-7B-Instruct, hardware target 8×H100/A100 (compatible con Y-TEC). Framework veRL (fork de Alibaba). Esto reabre Plan B como opción concreta vs Plan A (prime-rl) — decisión pendiente.
 
 **Todavía NO se está construyendo**: nada de código, nada de environment,
-nada de Azure ML, nada de experimentos. Esas fases (2–7 del roadmap)
-arrancan recién cuando el epic actual cierre.
+nada de Azure ML, nada de experimentos. Esas fases arrancan al cerrar #9 + decidir Plan A/B + definir el privileged context concreto para WebShop.
 
 ## 4. Donde mirar para qué
 

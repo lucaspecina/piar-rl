@@ -41,10 +41,17 @@ Misma pregunta de fondo, planteada contra el baseline experimental concreto:
 > produciendo igual o mejor señal per-paso con un setup más simple (sin
 > entrenar juez)?**
 
-Dos consecuencias prácticas de este reframe:
+Es una **nearest-neighbor replacement study**, NO una "única variable changed" (caveat añadido tras review crítico de Codex, 2026-05-11). La asimetría se mueve de pesos a prompt, pero también cambia **qué información** está disponible (outcome rankings binarios vs golden answer rico) y **cuánta**. Los confounds están explícitos en el diseño experimental:
 
-- **Experimento primario = PIAR vs iStar en WebShop**, con setup intacto, cambiando solo cómo se obtiene el término privilegiado del log-ratio (pesos del juez entrenado → prompt con golden answer del mismo modelo). Aísla "fuente de la asimetría" como única variable entre ambos sistemas.
-- **Responde también la duda interna** sobre si la info del juez de iStar es información nueva o re-codificación de outcomes (ver [`research/notes/paper-istar.md`](research/notes/paper-istar.md) §16). Si PIAR matchea o supera a iStar, era re-codificación y se puede saltar.
+- **Cantidad/tipo de información privilegiada**: PIAR ve una golden answer estructurada; iStar solo ve "ganó/perdió" agregado a nivel trayectoria. Si PIAR gana puede ser por más info, no por prompt-asymmetry per se. Mitigación parcial: shuffled-golden control (D.9).
+- **Mismos pesos del student (invariante 4)**: el setup primario usa **`π_old` + golden** vs **`π_old`** (misma snapshot, dos prompts), NO frozen θ₀. Esto resuelve la tensión: si el teacher fuera θ₀ y el student θ_t (con t > 0), ya no son "mismos pesos" y el log-ratio mezcla efecto-contexto con weight-drift. Ver [`research/synthesis/design-decisions.md`](research/synthesis/design-decisions.md) C.2.
+- **Hyperparams α/β**: tunear solo para PIAR sería unfair contra iStar; no tunear nada puede ser unfair contra PIAR. Solución: defaults de iStar (β=0.05, α=1) como punto de partida + pequeño grid compartido pre-registrado.
+- **Leakage**: el control existencial es **shuffled-golden** (meter golden de otra tarea como sanity de que PIAR no mide solo answer-conditioned textual affinity). Ver D.9. Sin este control, ningún resultado positivo de PIAR es defendible.
+
+**Lo que el experimento puede responder honestamente**:
+- Si PIAR ≥ iStar **y** shuffled-golden ≤ outcome-only → la info privilegiada en prompt es alternativa viable al PRM entrenado.
+- Si PIAR < iStar → el PRM entrenado captura algo (patrones temporales, regularización implícita) que el modelo con golden en prompt no extrae.
+- Si shuffled-golden ≈ PIAR real → PIAR está midiendo answer-conditioned textual affinity, no causalidad. Resultado negativo limpio.
 
 ## Lo que PIAR quiere lograr
 
