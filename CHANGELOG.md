@@ -5,6 +5,15 @@ que la motivó (formato `#N`).
 
 ## 2026-05-12
 
+- **Propagación post-review Codex a los docs que citaban el LOC estimate viejo** (commit chico, scope cerrado):
+  - **`code/NOTICE.md`**: dos menciones de "30-100 líneas" actualizadas a "~150 líneas" con referencia al §6.4 del adendum. Lista de archivos principales reescrita para reflejar el mapeo confirmado (incluye `main_ppo.py` guard nuevo + token-flow logging).
+  - **`research/synthesis/design-decisions.md` A.2**: status actualizado a "Cerrada 2026-05-11; LOC actualizado 2026-05-12". LOC estimate cambia de "30-100" → "~150" con justificación inline (plumbing del goal injection + bypass del RM worker + token-flow logging). Mantiene la conclusión "sigue siendo modificación quirúrgica vs reimplementar iStar — pero la promesa 30-100 requiere asterisco".
+  - **`research/synthesis/design-decisions.md` D.10 nueva fila**: candidata 🟡 "Token-flow analysis del `rm_scores` como pre-requisito de Apuesta A". Cruza con piar-delta §4.1 y D.1. Razón: loggear contribución del log-ratio por tipo de token (think/action/other) antes de validar Apuesta A — porque lo que iStar llama "action-level" es realmente "todos los tokens colapsados al final". ~10-20 LOC para el diagnóstico.
+  - **`research/synthesis/papers-cross-mapping.md`** §iStar: mención de "30-100 líneas" actualizada a "~150 líneas".
+  - **`research/synthesis/piar-implementation-points.md` §5.3 cierre**: "Conclusión honesta" reescrita honestamente — la promesa "30-100 LOC" no se cumple, estimación realista ~150 LOC. Eliminada línea duplicada sobre chat template.
+- **No se modifica `PROJECT.md` roadmap fase 4**: ya decía "30-100 líneas" pero el cambio ahí requiere reescribir más contexto y se puede hacer en un commit separado si querés.
+- **Pendiente (para commit GitHub posterior)**: crear issue dedicado para D.10 (token-flow analysis); agregar criterio de cierre extendido a #16 (smoke run con bypass del RM worker, no solo replicar baseline).
+
 - **Review crítico de Codex sobre `piar-implementation-points.md`** (gpt-5.4, sandbox read-only). 5 hallazgos relevantes que reescriben partes del mapeo. Consolidado en nueva **§6 Adendum post-review Codex** del doc + markers ⚠️ inline en las secciones afectadas. Hallazgos:
   - **§6.1 — `update=none` NO salta init del RM**: solo evita `optimizer.step()`. `main_ppo` igual instancia `Role.RewardModel`, `rm_fsdp_workers.py:115-265` igual carga modelo + optimizer + scheduler. Costo: ~14 GB VRAM extra. Bypass real requiere edit en `main_ppo.py` (~10-15 LOC), no solo en config.
   - **§6.2 — "Opción A" de §2.2 (mantener RM worker como teacher) es INVÁLIDA**: el `reward_module` se carga UNA vez desde `model.path` y queda desacoplado del actor que PPO actualiza. Después del primer update PPO, `θ_inicial ≠ θ_t` → el numerador queda en `π_init`, no `π_old` → **rompe invariante 4** sin querer (re-introduce el bug que C.2 cerró el 2026-05-11). Solo Opción B (usar `actor_rollout_wg.compute_log_prob` para los dos forward passes) preserva el invariante. La v1 del doc presentaba A y B como alternativas "preferir B"; la realidad es que A está mal.

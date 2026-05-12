@@ -66,7 +66,8 @@ este paper.
   unificar pesos, sino reemplazar el aprendizaje por información en el
   contexto).
 - **Implicación operacional**: forkear `CharacterRL-iStar` y cambiar
-  ~30-100 líneas. Es Plan B (cerrado en A.2 de `design-decisions.md`).
+  **~150 líneas** (estimación inicial 30-100 era optimista, revisada
+  2026-05-12 post-review Codex — ver [`piar-implementation-points.md`](piar-implementation-points.md) §6.4). Es Plan B (cerrado en A.2 de `design-decisions.md`).
 
 ### OPSD — Self-Distilled Reasoner (Zhao et al. 2026)
 [notas](../notes/paper-opsd.md) · [#5](https://github.com/lucaspecina/piar-rl/issues/5) (cerrado)

@@ -393,9 +393,8 @@ Si al implementar aparece:
 - **El env worker pipe no expone bien el goal** (es Flask subyacente, puede haber estado mutable raro entre steps): puede sumar 10-15 LOC de defensive coding. Total ~160-220 LOC.
 - **Token-flow del reward concentrado en `<think>`**: si la diagnóstica de §6.5 confirma el problema, agregar action-span masking (~15-25 LOC) para que `rm_scores` capture solo los tokens de la acción real, no el reasoning privilegiado. Total ~175-240 LOC.
 - **Chat template de Qwen2.5-Instruct rompe inyección inline del golden**: el formato `<|im_start|>system\n...<|im_end|>` puede forzar a meter el golden como system message separado en vez de inline. ~5-10 LOC de template handling.
-- **La inyección textual rompe el chat template** (Qwen2.5-Instruct usa `<|im_start|>system\n...<|im_end|>` etc.): puede que el golden tenga que ir como system message separado, no inline en user. Sumar 5-10 LOC de template handling.
 
-**Conclusión honesta:** 30-100 LOC se sostiene como **mínimo viable** (Opción A en todo). El path recomendado (Opción B con archivo nuevo) está en **80-160 LOC** — un poquito sobre el límite alto, pero estructuralmente mucho más limpio y trazable. Lucas decide.
+**Conclusión honesta (revisada 2026-05-12):** la promesa original "30-100 LOC" no se cumple. La estimación realista es **~150 LOC** para una implementación correcta y verificable (Opción B obligatoria por §6.2). PIAR sigue siendo modificación quirúrgica vs reimplementar iStar desde cero — pero la promesa fuerte requiere asterisco. Detalle en §6.4.
 
 ---
 

@@ -23,7 +23,7 @@ Decisión documentada el 2026-05-11 (ver
 [`research/synthesis/design-decisions.md`](../research/synthesis/design-decisions.md) A.2
 y [`CHANGELOG.md`](../CHANGELOG.md)):
 
-- Modificación esperada chica (~30-100 líneas) → un repo entero para eso es overkill.
+- Modificación esperada chica (**~150 líneas**, revisada post-review Codex 2026-05-12; estimación original 30-100 era optimista — ver [`../research/synthesis/piar-implementation-points.md`](../research/synthesis/piar-implementation-points.md) §6.4) → un repo entero para eso es overkill.
 - Reproducibilidad del paper se simplifica con una sola URL (`lucaspecina/piar-rl`).
 - iStar es paper publicado con código liberado — no esperamos updates upstream relevantes.
 - El git log de `piar-rl` queda como historia única e integrada del proyecto.
@@ -66,10 +66,17 @@ del log-ratio en el step reward**:
   diferencia única de inyectar el `golden` (spec estructurada del producto target)
   en el prompt del término "privilegiado".
 
-Estimación de líneas a tocar: 30-100. Archivos principales esperados:
+**Estimación de líneas a tocar: ~150 líneas** (revisada 2026-05-12 post-review Codex; estimación inicial 30-100 era optimista).
 
-- `istar/core_istar.py` — donde se computa el step reward.
-- `agent_system/reward_manager/episode.py` — donde se aplica al training.
-- `agent_system/multi_turn_rollout/rollout_loop.py` — inyección del golden solo en el forward pass del teacher.
+Mapeo confirmado en [`../research/synthesis/piar-implementation-points.md`](../research/synthesis/piar-implementation-points.md). Archivos principales:
 
-(Estos paths son tentativos; se confirman al arrancar fase 4.)
+- `code/verl/trainer/main_ppo.py` — guard para no instanciar `Role.RewardModel` cuando `update=none` (10-15 LOC).
+- `code/verl/trainer/ppo/ray_trainer.py:1242-1268` — reemplazar dispatch del RM por llamada a `compute_piar_step_reward` (20-25 LOC).
+- `code/istar/piar_step_reward.py` (nuevo) — función principal + helper `inject_golden_into_prompt` + token-flow logging (80-120 LOC).
+- `code/agent_system/environments/env_package/webshop/envs.py` — getter `get_current_goal` + multi-process handling (16-20 LOC).
+- `code/agent_system/environments/env_manager.py` — atributo `current_goals` propagado en reset/step (8-12 LOC).
+- `code/agent_system/multi_turn_rollout/rollout_loop.py` — pasar `current_goals` al batch (5-8 LOC).
+- `code/examples/istar_trainer/run_webshop.sh` — `update=after` → `update=none` + flags PIAR (3-5 LOC).
+- `code/istar/core_istar.py` — **intocable.** Consume `rm_scores` como opaque tensor.
+
+(Detalle por archivo + código actual vs propuesto en piar-implementation-points.md §2 y §5.)
