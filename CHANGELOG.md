@@ -26,6 +26,12 @@ que la motivó (formato `#N`).
   - Abierto **#15** (research): "Leakage vs progreso causal — D.1 (muestreo pareado) + D.9 (shuffled-golden control)".
   - Abierto **#16** (research, blocked): "Fase 3 — Replicar baseline iStar WebShop con CharacterRL-iStar". Bloqueado por #14 y setup de Azure ML.
   - Todos agregados al Project v2 board en `Todo`.
+
+### Parte 3 — decisión sobre privileged context para WebShop
+
+- **Insight aclarado**: iStar **no usa privileged context externo**. Su juez (PRM) se entrena con DPO sobre las trayectorias que el agente mismo genera + outcome labels del environment. Sin demos humanas, sin info externa, sin nada. La PI es una **dimensión nueva agregada por PIAR**, no heredada del diseño de iStar. Documentado al cerrar la duda en discusión 2026-05-11.
+- **Actualizada C.5 en `design-decisions.md`**: pasa de "🟡 Abierta — solución completa con CoT genérico" a "➡️ Inclinada — **spec estructurada del producto target como primary PI**". Razón: las trayectorias humanas (consideradas inicialmente como primary) solo cubren ~1.6K de ~12K tareas de WebShop → forzaría reducir el training set y perder comparabilidad con números de iStar. La spec estructurada (brand/color/capacity/price_range/etc.) viene gratis en el dataset original y cubre el 100% de tareas. **Ablations preservadas**: (a) trayectorias humanas sobre el subset de 1.6K para responder "¿la traza entera agrega sobre solo dar la spec?", (b) product ID literal como upper bound de leakage, (c) descripción NL como lower bound de info.
+- **Abierto #17** (design): "Definir privileged context para WebShop — spec estructurada del producto target como primary PI". Detalla: extraer las specs del dataset, definir template del prompt del teacher con la spec inyectada, loggear PI per-experiment, identificar subset de 1.6K tareas con demos humanas para ablations. Bloqueado parcialmente por #14 (Plan A/B) pero la extracción de specs puede arrancar igual.
 - **Codex MCP validado como segunda opinión técnica**: encontró confounds reales en la reformulación de hoy (la oversold-única-variable + la tensión C.2/invariante 4 + la falta de shuffled-golden). Todas las correcciones aplicadas.
 
 ## 2026-05-07
