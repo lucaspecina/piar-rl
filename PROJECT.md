@@ -60,6 +60,7 @@ Es una **nearest-neighbor replacement study**, NO una "única variable changed" 
 - **Plug-and-play sobre RL existente**: la salida de PIAR es un escalar por acción que entra al advantage de GRPO/PPO standard. No requiere refactor del optimizer ni del rollout loop.
 - **Validación cuantitativa contra baselines fuertes**: WebShop primero (estándar de agentic RL), después al menos un benchmark más para argumentar generalidad.
 - **Story explicable de las ablations**: si gana, entender por qué; si pierde, entender qué supuesto del paper falla. Ambos resultados son publicables.
+- **Análisis riguroso de leakage textual y estructural** del log-ratio teacher-privilegiado vs student. Esta es **contribución independiente del resto**: ninguno de los papers vecinos (OPSD-Zhao, OPSD-Penaloza, SWEET-RL, π-Distill) hizo este análisis a fondo. **Si las apuestas técnicas vs el vecino más cercano (π-Distill α=0) no producen ganancias medibles, este análisis solo es contribución suficiente.** Ver [`research/synthesis/piar-delta.md`](research/synthesis/piar-delta.md) §5 y `design-decisions.md` D.1 + D.9.
 
 ## Lo que NO es
 
@@ -67,6 +68,8 @@ Es una **nearest-neighbor replacement study**, NO una "única variable changed" 
 - **No es trabajo de math reasoning single-turn.** Eso lo hace OPSD. PIAR vive en agentes multi-turn ReAct.
 - **No es un PRM entrenable.** El teacher no se entrena; se le pasa más contexto. Esa es la apuesta diferenciadora vs iStar.
 - **No es distillation con teacher más fuerte.** Si el teacher es un modelo distinto (más grande, mejor entrenado, distilled, ensembled), aunque tenga golden en contexto, ya no es PIAR — es la línea de SWEET-RL / distillation guiada por privileged info. Ahí el log-ratio mezcla efecto-de-contexto con efecto-de-modelo y la conclusión científica se diluye.
+- **No es π-Distill.** π-Distill es **tres regímenes según α** (1, 0.5, 0). El caso α=1 entrena al teacher: PIAR no. **El caso α=0 ("OPSD-Penaloza")** comparte spirit con PIAR: same model, teacher no se entrena (via stop-grad sobre params compartidos), student samplea, outcome reward. **Acá el delta de PIAR es técnico, no conceptual**: (a) action-level vs token-level granularity, (b) log-ratio como reward que entra al advantage de GRPO vs KL como regularizador del loss, (c) advantage normalization estilo iStar vs β fijo. Las tres apuestas son **empíricas, no estructurales** — su validez depende de los experimentos. **Si los experimentos no muestran ventaja medible, PIAR colapsa a "refinamiento técnico de OPSD-Penaloza α=0".** Detalle completo en [`research/synthesis/piar-delta.md`](research/synthesis/piar-delta.md).
+- **No es OPSD-Zhao.** Comparte spirit (same model + privileged context), pero OPSD-Zhao validó en single-turn matemática con forward KL token-level. PIAR vive en multi-turn agentic con log-ratio action-level como reward — la transición no está validada por nadie todavía.
 - **No es construir un benchmark nuevo.** Usamos los existentes (WebShop, ALFWorld, SOTOPIA, τ-Bench). Eventualmente SREG como caso de estudio, pero no antes.
 - **No es ajustar hyperparameters de un baseline.** Si la idea no gana por sí sola, las ablations explican por qué — no se rescata con HP search ad-hoc.
 

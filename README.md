@@ -26,6 +26,7 @@ Research project sobre RL para LLM agents. Propone usar el log-ratio entre un te
 | Roadmap y trabajo pendiente | [Project v2 #5](https://github.com/users/lucaspecina/projects/5) · `gh issue list -R lucaspecina/piar-rl` |
 | Historial de cambios | [`CHANGELOG.md`](CHANGELOG.md) |
 | Decisiones de diseño | [`research/synthesis/design-decisions.md`](research/synthesis/design-decisions.md) |
+| Delta deep-dive vs π-Distill α=0 (vecino más cercano) | [`research/synthesis/piar-delta.md`](research/synthesis/piar-delta.md) |
 | Notas de papers | [`research/notes/`](research/notes/) |
 | Research consolidado | [`research/synthesis/`](research/synthesis/) |
 

@@ -34,6 +34,7 @@
 | Estado HOY del sistema | `CURRENT_STATE.md` |
 | **Decisiones de diseño + trazabilidad** | [`research/synthesis/design-decisions.md`](research/synthesis/design-decisions.md) |
 | **Síntesis cruzada de papers + delta de PIAR** | [`research/synthesis/papers-cross-mapping.md`](research/synthesis/papers-cross-mapping.md) |
+| **Delta deep-dive vs π-Distill α=0** (vecino más cercano, apuestas A/B/C, defense en review) | [`research/synthesis/piar-delta.md`](research/synthesis/piar-delta.md) |
 | **Codebase base (fork iStar vendoreado)** | [`code/`](code/) — ver [`code/NOTICE.md`](code/NOTICE.md) para procedencia + licencia |
 | Roadmap / trabajo pendiente | [Project v2 #5](https://github.com/users/lucaspecina/projects/5) · `gh issue list -R lucaspecina/piar-rl` |
 | Workflow de tracking (cómo crear/cerrar issues, sub-issues, etc.) | `.claude/skills/tracking/SKILL.md` + `commands.md` + `reference.md` |

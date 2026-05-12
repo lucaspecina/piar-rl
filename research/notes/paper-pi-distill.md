@@ -67,23 +67,46 @@ con $\alpha \in [0, 1]$ regulando si el énfasis está en mejorar el teacher (α
 
 ## 4. La diferencia operativa con PIAR — esto es lo que importa
 
-| | π-Distill | PIAR |
+> **Importante para no confundirse:** π-Distill no es UN método. Son **tres regímenes según α** (1, 0.5, 0). El "vecino real" de PIAR depende de cuál régimen comparemos. **El más cercano a PIAR es α=0** ("OPSD-Penaloza", Eq. 5 del paper), no α=1. La narrativa "π-Distill entrena al teacher, PIAR no" aplica a α=1 pero **es engañosa en α=0** (donde tampoco se entrena el teacher, via stop-grad).
+
+### 4.1 Tabla por régimen
+
+| Régimen | Quién samplea | Teacher se entrena? | Loss principal | Vecino de PIAR? |
+|---|---|---|---|---|
+| **α=1** | Teacher (con PI) | Sí | $E[R] - \beta KL(\pi^T \| sg(\pi^S))$ | Lejos — teacher entrenado, off-policy del student |
+| **α=0.5** | Mix | Parcial | combinado | Intermedio |
+| **α=0** ("OPSD-Penaloza", Eq. 5) | **Student** | **No (stop-grad)** | $E_{\pi^S}[R] - \beta KL(\pi^S \| sg(\pi^T))$ | **Vecino más cercano** |
+
+### 4.2 PIAR vs π-Distill α=0 — las diferencias REALES
+
+Cuando se compara contra el régimen más cercano (α=0), las diferencias se reducen a **tres aspectos técnicos**:
+
+| Dimensión | π-Distill α=0 | PIAR |
 |---|---|---|
-| Mismo modelo? | Sí | Sí |
-| Asimetría vive en | Contexto | Contexto |
-| **Teacher se entrena?** | **Sí, con $\mathcal{J}_{\text{Teacher}}$** | **No, frozen al checkpoint inicial** |
-| **Student se entrena?** | **Sí, con $\mathcal{J}_{\text{Student}}$ off-policy** | **Sí, con GRPO usando log-ratio como step reward** |
-| Loss | KL distillation + RL | Log-ratio como reward |
-| Sampling de trayectorias | Teacher samplea → student aprende off-policy | Student samplea → teacher solo prefilling para logits |
-| Hyperparams clave | $\alpha$ (peso teacher/student), $\beta$ (KL) | $\beta$ (escala log-ratio) |
+| Mismo modelo | ✓ Sí | ✓ Sí |
+| Teacher frozen | ✓ Sí (stop-grad) | ✓ Sí (snapshot inicial) |
+| Student samplea | ✓ Sí | ✓ Sí |
+| Outcome reward presente | ✓ Sí | ✓ Sí |
+| **Cómo entra la señal del teacher** | KL como **regularizador del loss**: $-\beta KL(\pi^S \| \pi^T)$ | Log-ratio como **reward por acción** que entra al advantage de GRPO |
+| **Granularidad** | Token-level KL | Action-level (span ReAct completo) |
+| **Combinación con outcome** | β fijo crudo | Advantage normalization estilo iStar: $A = A^E + \alpha A^S$ |
 
-**Interpretación:** π-Distill y PIAR comparten el spirit (PI teacher + agentic) pero divergen en la mecánica:
-- π-Distill **entrena al teacher** activamente con $\mathcal{J}_{\text{Teacher}}$ para que aprenda a usar bien la PI, después destila al student via KL.
-- PIAR **no entrena al teacher** — usa el modelo inicial como evaluador con golden context para extraer una señal por step.
+Los **tres deltas técnicos son verificables pero NO están validados empíricamente**. Su importancia depende de los experimentos.
 
-**Caveat importante (codex review):** como π-Distill comparte parámetros entre teacher y student, incluso con $\alpha = 1$ (solo teacher entrena en el loss combinado), el student **se mueve indirectamente** porque actualiza θ — y ese θ es el de ambos. La distinción "teacher entrena, student no" es operativa, no de parámetros. En PIAR no hay esta dualidad porque solo hay un objetivo y un set de gradientes; el teacher es snapshot frozen separado.
+### 4.3 La conexión matemática que hay que tener clara
 
-**Consecuencia operativa:** π-Distill es **off-policy** desde la perspectiva del student (rollouts vienen del teacher). PIAR es **on-policy** estricto (invariante 6 de PROJECT.md): el student genera sus propias trayectorias; el teacher solo emite logprobs sobre lo generado.
+Para distribuciones $\pi^S, \pi^T$ fijas: $E_{a \sim \pi^S}[\log \pi^T(a) - \log \pi^S(a)] = -KL(\pi^S \| \pi^T)$.
+
+Es decir: **maximizar log-ratio como reward (PIAR), en expectativa sobre el sampling del student, es equivalente a minimizar $KL(\pi^S \| \pi^T)$ (OPSD-Penaloza α=0)**. La diferencia operativa real vive en:
+- Granularidad de agregación (span vs token).
+- Estimador finito y su normalización (advantage normalization vs β crudo).
+- Cómo el optimizer trata la señal (clipping y trust region de PPO/GRPO sobre el step advantage vs gradient flow del KL como término del loss).
+
+### 4.4 Caveat sobre los otros regímenes
+
+En α=1, π-Distill comparte parámetros entre teacher y student, así que aunque el "teacher entrena" en el loss combinado, el student **se mueve indirectamente** porque actualiza θ (el de ambos). La distinción "teacher entrena, student no" es operativa, no de parámetros. En PIAR no hay esta dualidad porque solo hay un objetivo y un set de gradientes; el teacher es snapshot frozen separado.
+
+**Consecuencia operativa para α=1:** π-Distill α=1 es **off-policy** desde la perspectiva del student (rollouts del teacher con importance weighting). PIAR es **on-policy** estricto (invariante 6 PROJECT.md). Esa diferencia es estructural y clara contra α=1; **contra α=0 ambos son on-policy del student**, así que el delta vive solo en los tres aspectos técnicos de §4.2.
 
 ## 5. OPSD (de este paper) vs OPSD (de Zhao et al. #5)
 
@@ -203,14 +226,28 @@ Inicial $D_{KL}(\pi^T_{\text{base}} \| \pi^S_{\text{base}})$ alta es predictor n
 - **D.7 (candidata):** **frequency penalty sobre tokens con log-ratio anómalamente alto** (estilo π-Distill mitigación token-level leakage). Activar solo si D.2 detecta el problema. Default: no aplicar; agregar como mitigación si la distribución de log-ratios muestra outliers.
 - **D.8 (candidata):** **sanity check al inicio del training**: verificar que el modelo base de PIAR distinga razonablemente "con golden" vs "sin golden" — diferencia de logprobs no trivial sobre tokens correctos. Si no, el método tiene poco margen para mejorar (warning de π-Distill §9.4).
 
-### 12.3 Argumento de defensa de PIAR refinado
+### 12.3 Argumento de defensa de PIAR refinado — versión honesta
 
-π-Distill demuestra que la idea "PI teacher + agentic multi-turn" funciona (+11.8% TravelPlanner). PIAR difiere en:
-1. **No entrena al teacher** → menor costo de cómputo, sin riesgo de colapso por shared-params + dual gradients.
-2. **Log-ratio como reward** vs KL distillation → integración natural con GRPO advantage (estilo iStar), no requiere importance weighting off-policy.
-3. **On-policy estricto** (invariante 6 PROJECT.md): student genera, teacher evalúa. π-Distill es off-policy del student.
+π-Distill demuestra que la idea "PI teacher + agentic multi-turn" funciona (+11.8% TravelPlanner).
 
-Si un reviewer dice "ya hay π-Distill", la respuesta es: comparten spirit, divergen en mecánica. PIAR es la versión on-policy + log-ratio + teacher-frozen del concept.
+**El vecino real de PIAR es π-Distill α=0 ("OPSD-Penaloza")**, no α=1. Contra α=0:
+1. ✅ Mismo modelo (igual).
+2. ✅ Teacher frozen (igual, via stop-grad en su caso, snapshot inicial en PIAR).
+3. ✅ Student on-policy (igual).
+4. ✅ Outcome reward presente (igual).
+
+**El delta vive en TRES aspectos técnicos** (ver §4.2): granularidad action-level vs token-level, log-ratio-as-reward vs KL-as-regularizer, advantage normalization estilo iStar vs β fijo crudo. **Las tres son apuestas empíricas**, no diferencias estructurales.
+
+**Si un reviewer dice "esto es OPSD-Penaloza α=0 con cambios técnicos":** la respuesta honesta es:
+- En spirit, sí. Comparten same-model + frozen teacher + student on-policy + outcome reward.
+- En mecánica, hay tres deltas técnicos verificables. Su importancia se mide en experimentos (Apuestas A, B, C en `research/synthesis/piar-delta.md` §4).
+- **Contribución independiente de A/B/C:** análisis riguroso de leakage textual y estructural (D.1) que ningún paper de la familia hizo a fondo.
+
+**Contra α=1 (donde π-Distill sí entrena al teacher) la diferencia es más grande:** PIAR no entrena el teacher (menor costo, sin riesgo de colapso shared-params + dual gradients) y es on-policy estricto vs off-policy con importance weighting. Pero ese **no es el vecino crítico** — el crítico es α=0.
+
+**Posicionamiento del paper:** PIAR es la unión "same-model + privileged-context + log-ratio-as-reward + action-level + multi-turn agentic + frozen teacher". Esa unión específica no la propuso nadie todavía. **Pero es una unión, no un componente nuevo.** Su valor se valida con experimentos.
+
+Detalle completo en [`research/synthesis/piar-delta.md`](../synthesis/piar-delta.md).
 
 ### 12.4 Lo que PIAR NO debe ignorar
 
