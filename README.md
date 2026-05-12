@@ -27,6 +27,7 @@ Research project sobre RL para LLM agents. Propone usar el log-ratio entre un te
 | Historial de cambios | [`CHANGELOG.md`](CHANGELOG.md) |
 | Decisiones de diseño | [`research/synthesis/design-decisions.md`](research/synthesis/design-decisions.md) |
 | Delta deep-dive vs π-Distill α=0 (vecino más cercano) | [`research/synthesis/piar-delta.md`](research/synthesis/piar-delta.md) |
+| Mapeo de implementación PIAR sobre `code/` (fase 4 prep) | [`research/synthesis/piar-implementation-points.md`](research/synthesis/piar-implementation-points.md) |
 | Notas de papers | [`research/notes/`](research/notes/) |
 | Research consolidado | [`research/synthesis/`](research/synthesis/) |
 

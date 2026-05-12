@@ -5,6 +5,19 @@ que la motivó (formato `#N`).
 
 ## 2026-05-12
 
+- **Mapeo end-to-end de implementación PIAR sobre `code/`** en [`research/synthesis/piar-implementation-points.md`](research/synthesis/piar-implementation-points.md) (~400 líneas, 5 secciones + apéndice). Trace completo del pipeline iStar desde `run_webshop.sh` hasta `core_istar.py` consumiendo `rm_scores`, con citas `archivo:línea` exactas. **Insight central**: `code/istar/dp_rm.py:161` (`q = rm_log_labels - ref_log_labels`) ya es estructuralmente un framework de log-ratio — PIAR es **reemplazo de inputs** (qué modelo + qué prompt alimentan cada término), no un rewrite. Hot spots identificados:
+  - **Bypass del PRM training**: 1 línea en `run_webshop.sh:56` (`update=after` → `update=none`). El branch `update=none` ya existe en `ray_trainer.py:1244-1245`.
+  - **Reemplazar cómputo del log-ratio**: nuevo `compute_piar_step_reward` con dos forward passes via `actor_rollout_wg.compute_log_prob` (que ya existe en `verl/workers/fsdp_workers.py:665-705`).
+  - **Goal injection vía env**: ~10-15 LOC para propagar `golden_dict` desde `web_agent_text_env.py:519-521` (donde vive el goal) a `non_tensor_batch` via `envs.py:71-72` + `env_manager.py` + `rollout_loop.py`.
+  - **`core_istar.py` intocable**: consume `rm_scores` como opaque tensor, downstream no se entera del cambio.
+- **Estimación de LOC honesta**: 40-65 LOC en Opción A (config + deltas in-place; cumple promesa 30-100), 80-160 LOC en Opción B con archivo nuevo `code/istar/piar_step_reward.py` (más limpio, al límite alto pero defendible). Lucas decide el path.
+- **Riesgos notables identificados**:
+  - Mismatch de logprobs entre `dp_rm.py` (fused kernels) y `actor.compute_log_prob` (non-fused) — mitigación: usar el mismo path para los dos términos.
+  - Token budget: `max_prompt_length=4096` puede ajustar con la spec inyectada — loggear distribución antes de production.
+  - SwanLab metrics: `compute_dpo_accuracy` queda vacío al skippear DPO update — dummy values si el logger rompe.
+- **Roadmap de fase 4 propuesto** en el doc (8 pasos ordenados, desde "replicar baseline iStar" hasta "D.1 + D.9 leakage controls").
+- **Aporta concreción a #17** (privileged context para WebShop): identificada la estructura exacta del goal en `web_agent_text_env.py:519-521` y `web_agent_site/engine/goal.py:16-66`. La extracción de specs ahora tiene puntos de entrada precisos.
+
 - **Fix de inconsistencias internas en docs** (propagación pendiente desde commits del 2026-05-11 — el commit `abb35f8` actualizó `design-decisions.md` y `CURRENT_STATE.md` parcialmente pero dejó bits stale en varios docs):
   - **`PROJECT.md` invariante 4 sub-decisión**: decía "INCLINADA (2026-05-07): frozen al checkpoint inicial" — C.2 ya había cambiado a `π_old` el 2026-05-11. Reescrita: `π_old` como default primario, frozen θ₀ degradado a ablation de estabilidad, con razón explícita (frozen θ₀ rompe "mismos pesos" después del primer update → mezcla efecto-contexto con weight-drift). Cierre definitivo abierto en E.3. (Refs #5)
   - **`PROJECT.md` roadmap fase 2**: decía "Stack ya decidido (prime-rl + verifiers, #11)" — #14 cerró el 2026-05-11 con Plan B (`code/CharacterRL-iStar`). Actualizado. (Refs #14)
