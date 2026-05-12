@@ -5,6 +5,15 @@ que la motivó (formato `#N`).
 
 ## 2026-05-12
 
+- **Progreso en #17 (privileged context WebShop)** sin necesidad de VM ni Azure ML:
+  - Creado script standalone `tools/extract_webshop_specs.py` (~280 LOC) que reproduce `get_human_goals` de `code/agent_system/.../engine/goal.py:22-65` sin requerir conda env de webshop. Produce JSON con metadata + análisis estadístico + N ejemplos serializados. Función `serialize_spec_for_teacher_prompt(goal)` definida acá como template estilo OPSD (decisión C.3), reusable desde `code/istar/piar_step_reward.py` cuando arranque fase 4.
+  - Plan de análisis completo en [`research/notes/webshop-specs-analysis-plan.md`](research/notes/webshop-specs-analysis-plan.md) con preguntas concretas (¿cuántos goals?, ¿qué tan rica es la spec?, ¿token budget?, ¿diversidad de categorías?), criterios de éxito, y decisiones que destraba (C.5 sostenida vs pivot, max_prompt_length, filtering categórico). Bloqueado por descarga del dataset (`setup.sh -d all`, ~150-200 MB gdown).
+  - Creado `tools/README.md` con uso del script.
+  - Comment en [#17](https://github.com/lucaspecina/piar-rl/issues/17#issuecomment-4433345955) documentando el progreso.
+- **Issue [#16](https://github.com/lucaspecina/piar-rl/issues/16) extendida** con criterio de cierre adicional post-review Codex: smoke run con bypass del RM worker desde `main_ppo.py` (no solo replicar baseline iStar). Verificar VRAM ~14 GB menos cuando el RM no se carga. Esto alinea el setup de la replicación con el setup que tendrá PIAR en fase 4.
+- **Issue [#18 nueva](https://github.com/lucaspecina/piar-rl/issues/18) — D.10 token-flow analysis** creada como `research` label, Status `Todo` en Project v2. Pre-requisito diagnóstico de Apuesta A: loggear contribución del log-ratio por tipo de token (think / action / other) durante el smoke run de fase 4. ~10-20 LOC en `compute_piar_step_reward`. Si masa del reward está en `<think>`: agregar masking. Si está en `Acción:`: Apuesta A se valida sin más cambios. Cruza con D.1 (leakage textual) pero es distinta.
+- **D.10 fila en `design-decisions.md`** actualizada con link a [#18](https://github.com/lucaspecina/piar-rl/issues/18) (era "pendiente issue dedicado").
+
 - **Propagación post-review Codex a los docs que citaban el LOC estimate viejo** (commit chico, scope cerrado):
   - **`code/NOTICE.md`**: dos menciones de "30-100 líneas" actualizadas a "~150 líneas" con referencia al §6.4 del adendum. Lista de archivos principales reescrita para reflejar el mapeo confirmado (incluye `main_ppo.py` guard nuevo + token-flow logging).
   - **`research/synthesis/design-decisions.md` A.2**: status actualizado a "Cerrada 2026-05-11; LOC actualizado 2026-05-12". LOC estimate cambia de "30-100" → "~150" con justificación inline (plumbing del goal injection + bypass del RM worker + token-flow logging). Mantiene la conclusión "sigue siendo modificación quirúrgica vs reimplementar iStar — pero la promesa 30-100 requiere asterisco".
