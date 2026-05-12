@@ -1,13 +1,14 @@
 # PIAR — Estado actual
 
-> Banner duro: **HOY no corre nada de código.** PIAR está en fase de research
-> consolidado de papers vecinos. La síntesis del cross-paper-mapping todavía no
-> está hecha. Cuando esté, recién ahí pasa a la fase de implementación.
+> Banner (2026-05-11): **Fase 1 (research) cerrada. Fase 2 (setup compute) próxima.**
+> Código de iStar vendoreado en [`code/`](code/) como base de PIAR, sin modificaciones
+> propias todavía. **Nada corrido aún** — falta Azure ML Y-TEC operacional.
 
 ## 1. Qué corre HOY
 
-**Cero código.** No hay environment, no hay deps, no hay modelos, no hay
-experimentos. Lo único que existe es la **infraestructura de tracking y docs**:
+**Nada corrido todavía.** Tenemos el código de iStar vendoreado en `code/` (commit
+upstream `81af1429f306a0fc9f84302528f32821cc2f273b`, fork de `Tongyi-ConvAI/Qwen-Character/CharacterRL-iStar`,
+Apache-2.0) pero no se instaló el environment ni se corrió ningún training. Lo que existe es la **infraestructura de tracking, docs, research consolidado, y el codebase base sin tocar**:
 
 - **Repo público** `lucaspecina/piar-rl` con docs raíz (README, PROJECT,
   CURRENT_STATE, CLAUDE, CHANGELOG, AUTORESEARCH) y workflow definido.

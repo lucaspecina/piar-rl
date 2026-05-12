@@ -49,27 +49,28 @@ agentic multi-turn RL (iStar). Fase actual: **research/papers, sin código**.
 
 ## Environment setup
 
-Por ahora no hay código → no hay environment de runtime. Cuando arranque la fase
-de implementación, el plan tentativo es:
+**Código vendoreado en [`code/`](code/) desde 2026-05-11** (fork de `CharacterRL-iStar`).
+Pero todavía **no hay environment instalado / runs corridos**. Próximo paso es setup en Azure ML Y-TEC.
 
-- **Dev local:** Windows + conda/uv (TBD).
-- **Compute pesado:** Azure ML (Y-TEC) con A100 / H100. Ver skill
-  `azure-ml-connect` (user-level) cuando llegue el momento.
-- **Frameworks objetivo:** PyTorch, verl (base de iStar), vLLM, transformers.
+Requirements documentados en `code/requirements.txt` + `code/pyproject.toml` (Python 3.12, torch 2.6, vllm 0.8.5, flash-attn 2.7.4). WebShop necesita Python 3.10 separado (ver `code/README.md`).
+
+- **Compute pesado:** Azure ML (Y-TEC) con 8×A100/H100 single-node. Ver skill
+  `azure-ml-connect` (user-level) cuando llegue la fase 2.
+- **Dev local:** macOS (lectura/exploración del código, edición); training real solo en Azure ML.
 
 ## Tech stack
 
-Decisión operativa al 2026-05-04 (ver análisis completo en
-[`research/notes/repos-mapping.md`](research/notes/repos-mapping.md) y trazabilidad en [#11](https://github.com/lucaspecina/piar-rl/issues/11)):
+**Decisión actualizada 2026-05-11** (ver `research/synthesis/design-decisions.md` A.1/A.2 + [#14](https://github.com/lucaspecina/piar-rl/issues/14) cerrado):
 
-- **[`prime-rl`](https://github.com/PrimeIntellect-ai/prime-rl)** (Prime Intellect, Apache-2.0) — framework de RL agentic asincrónico. FSDP2 + vLLM + multi-turn nativo. Heredado de SREG.
-- **[`verifiers`](https://github.com/PrimeIntellect-ai/verifiers)** (Prime Intellect, MIT) — librería de environments + rubrics. Define el harness, dataset y reward function.
-- **PyTorch** — base obvia.
-- **vLLM** — sampling rápido para rollouts (integrado en prime-rl).
+- **[`code/`](code/)** — fork vendoreado de [`CharacterRL-iStar`](https://github.com/Tongyi-ConvAI/Qwen-Character/tree/main/CharacterRL-iStar) (Tongyi-ConvAI, Apache-2.0, ICLR 2026). Base de implementación de PIAR.
+- Adentro de `code/` viene:
+  - **veRL fork de Alibaba** (`code/verl/`) — framework de RL, modificado para iStar.
+  - **PyTorch** + **vLLM** + **flash-attn** — stack standard de training.
+  - **7 trainers ejecutables** (`code/examples/`) — iStar, RLOO, GRPO, REINFORCE++, PPO, GiGPO, PRIME — todos con scripts para WebShop y Sokoban.
+- Modelo base: **Qwen2.5-7B-Instruct**.
+- Compute: **Azure ML Y-TEC** con 8×H100/A100 single-node.
 
-**Plan B documentado:** `verl` (ByteDance) si por alguna razón prime-rl no encaja
-para PIAR. **Plan C parked:** contactar autores iStar para acceso temprano al
-código (su repo no está liberado al 2026-05).
+**Plan A descartado** (2026-05-11): `prime-rl + verifiers` (Prime Intellect). La reformulación operativa contra iStar hace que forkear el repo exacto sea estructuralmente más simple. Plan A se reabre solo si necesitamos generalizar a benchmarks fuera del scope de `CharacterRL-iStar`. Análisis original en [`research/notes/repos-mapping.md`](research/notes/repos-mapping.md).
 
 ## Project structure
 
@@ -81,6 +82,8 @@ piar-rl/
 ├── CURRENT_STATE.md     # Qué corre hoy
 ├── CHANGELOG.md         # Historial de cambios con refs #N
 ├── AUTORESEARCH.md      # Config de autoresearch (OFF por defecto)
+├── code/                # Fork vendoreado de CharacterRL-iStar (Apache-2.0).
+│                        # Base de implementación de PIAR. Ver code/NOTICE.md.
 ├── experiments/         # Reproducibilidad — ENNN/manifest.yaml (gitignored ENNN/*)
 ├── research/
 │   ├── notes/           # Dumps de papers, debates (efímeros)

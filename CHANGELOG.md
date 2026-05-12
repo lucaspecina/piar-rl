@@ -39,6 +39,17 @@ que la motivó (formato `#N`).
 - **Cerrados**: #14 (Plan A/B decision) como completed con Plan B, #13 (Plan A POC) como `not planned` (Plan A descartado), #9 (síntesis cruzada) como completed, **#2 (epic Research) como completed — fase 1 del roadmap cerrada**.
 - **Nuevo doc**: [`research/synthesis/papers-cross-mapping.md`](research/synthesis/papers-cross-mapping.md) — síntesis cruzada del epic. Aísla delta de PIAR contra cada vecino (Yuan/iStar/OPSD/PRIME/SWEET-RL/Math-Shepherd/π-Distill), mapa visual de la celda vacía donde vive PIAR, las 3 preguntas que la literatura no responde, los 4 riesgos heredados con sus controles asociados, y el plan operacional post-síntesis.
 - **CLAUDE.md** actualizado: "Epics activos" marca #2 como Done. Sin epics activos al 2026-05-11; próximo posible epic = "Fase 4 — Implementar PIAR" cuando arranque la implementación.
+
+### Parte 5 — vendoring de iStar en `code/`
+
+- **Forkeado `Tongyi-ConvAI/Qwen-Character` a [`lucaspecina/Qwen-Character`](https://github.com/lucaspecina/Qwen-Character)** y luego se decidió **vendoreo (Modelo A)** en favor del fork standalone (Modelo B), siguiendo la práctica de research papers similares (PRIME, SWEET-RL, iStar mismo — todos con repos únicos que vendorean sus dependencias modificadas). Razones específicas para PIAR: modificación esperada chica (~30-100 líneas), reproducibilidad del paper con una sola URL, git log integrado de TODO el proyecto, iStar es paper publicado sin updates upstream esperados.
+- **Copiado el subdirectorio `CharacterRL-iStar/` upstream a [`code/`](code/) en `piar-rl`** (27MB). Commit upstream al vendoring: `81af1429f306a0fc9f84302528f32821cc2f273b`. LICENSE original (Apache-2.0) preservada en `code/LICENSE`. NOTICE explicando procedencia + licencia + modificaciones esperadas en [`code/NOTICE.md`](code/NOTICE.md).
+- **Documentación actualizada**:
+  - `README.md`: fase 1 marcada como Done, fase 2 explicada como "stack ya está, falta Azure ML Y-TEC". Tabla de estructura del repo incluye `code/`. Sección dedicada "Sobre `code/`" con link a NOTICE.
+  - `CLAUDE.md`: project structure incluye `code/`. Tech stack reescrito post-Plan-B (sin `prime-rl + verifiers`; ahora `code/` + veRL fork de Alibaba + PyTorch/vLLM/flash-attn). Environment setup ahora indica que el código existe pero falta install.
+  - `CURRENT_STATE.md`: banner actualizado — fase 1 cerrada, fase 2 próxima, código vendoreado pero nada corrido aún.
+  - `design-decisions.md` A.2: agrega commit SHA del vendoring + nota sobre Modelo A.
+- **Fork standalone `lucaspecina/Qwen-Character`** queda como snapshot referencial sin desarrollo activo. Podría removerse en el futuro si no se le encuentra utilidad concreta.
 - **Codex MCP validado como segunda opinión técnica**: encontró confounds reales en la reformulación de hoy (la oversold-única-variable + la tensión C.2/invariante 4 + la falta de shuffled-golden). Todas las correcciones aplicadas.
 
 ## 2026-05-07

@@ -7,12 +7,12 @@ Research project sobre RL para LLM agents. Propone usar el log-ratio entre un te
 | Fase | Paradigma | Estado |
 |---|---|---|
 | 0 — Bootstrap | Estructura + tracking + memoria | ✅ Done |
-| 1 — Research | Síntesis cruzada de papers vecinos | 🟡 Now |
-| 2 — Setup de compute | Stack decidido (prime-rl + verifiers); falta Azure ML setup | ⏳ Next |
-| 3 — Replicación de baseline | iStar baseline en WebShop | ⏳ |
-| 4 — Implementación PIAR | Modificación quirúrgica (~80–250 líneas) | ⏳ |
-| 5 — Comparación + ablations | PIAR vs baseline + ablations clave | ⏳ |
-| 6 — 2do benchmark + redacción | ALFWorld/SOTOPIA + draft | ⏳ |
+| 1 — Research | Síntesis cruzada de papers vecinos | ✅ Done (2026-05-11) |
+| 2 — Setup de compute | Stack decidido (fork CharacterRL-iStar vendoreado en [`code/`](code/)); falta Azure ML Y-TEC | ⏳ Next |
+| 3 — Replicación de baseline | iStar baseline en WebShop (#16) | ⏳ |
+| 4 — Implementación PIAR | Modificación quirúrgica de `code/` (~30–100 líneas) | ⏳ |
+| 5 — Comparación + ablations | PIAR vs iStar + leakage controls D.1/D.9 (#15) | ⏳ |
+| 6 — 2do benchmark + redacción | Sokoban (incluido en `code/`) + draft | ⏳ |
 | 7 — Caso de estudio SREG | SCM como info privilegiada (opcional) | ⏳ |
 
 ## Cómo navegar este repo
@@ -48,6 +48,8 @@ piar-rl/
 ├── CURRENT_STATE.md     # Qué corre hoy
 ├── CHANGELOG.md         # Historial con refs #N
 ├── AUTORESEARCH.md      # Config autoresearch (OFF)
+├── code/                # Fork vendoreado de CharacterRL-iStar (Apache-2.0).
+│                        # Base de implementación de PIAR. Ver code/NOTICE.md.
 ├── experiments/         # Reproducibilidad (gitignored ENNN/*)
 ├── research/
 │   ├── notes/           # Dumps de papers, debates
@@ -56,6 +58,12 @@ piar-rl/
 │   └── archive/         # Notas obsoletas
 └── .claude/skills/      # tracking, test, status
 ```
+
+## Sobre `code/`
+
+`code/` contiene una copia vendoreada de `CharacterRL-iStar/` (Tongyi-ConvAI, Apache-2.0, ICLR 2026). Es la base sobre la que se implementará PIAR — un fork directo del paper de iStar modificado quirúrgicamente para reemplazar el PRM aprendido por el mismo modelo con golden answer en el prompt.
+
+Detalle de procedencia, licencia y modificaciones esperadas en [`code/NOTICE.md`](code/NOTICE.md).
 
 ## Tracking
 
