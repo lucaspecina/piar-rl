@@ -1,12 +1,23 @@
 # PIAR — Puntos de implementación quirúrgica sobre `code/`
 
-> **Qué es esto:** mapeo end-to-end del pipeline de iStar vendoreado en `code/` con los puntos exactos a modificar para llegar a PIAR (~30-100 LOC). Cada referencia es `archivo:línea`.
+> **Qué es esto:** mapeo end-to-end del pipeline de iStar vendoreado en `code/` con los puntos exactos a modificar para llegar a PIAR. Cada referencia es `archivo:línea`.
 >
 > **Qué NO es:** no es PR todavía, no es código pegable. Es el plano para que el implementador (humano o agente) pueda atacar la fase 4 sin re-explorar el repo.
 >
 > **Pre-requisito de lectura:** `PROJECT.md` (invariantes 1-5), `research/synthesis/design-decisions.md` (especialmente A.2, B.1-B.7, C.1-C.5, D.9).
 >
 > **Decisión arquitectónica central que justifica esta estrategia:** `dp_rm.py:161` ya computa `q = rm_log_labels - ref_log_labels`. El framework de iStar es estructuralmente un log-ratio — solo cambia **qué modelo y qué prompt** alimentan cada término. PIAR es un reemplazo de inputs, no un rewrite.
+>
+> ## ⚠️ Estado post-review Codex (2026-05-12)
+>
+> Este doc fue revisado críticamente por Codex después de su primera versión. **5 hallazgos relevantes** que cambian el framing en partes específicas — están consolidados en la **§6 — Adendum post-review Codex** al final del doc. Cuando veas un ⚠️ inline, te lleva al item de la §6 que corrige esa parte.
+>
+> **Resumen de los cambios más importantes**:
+> - La "Opción A" de §2.2 (mantener el RM worker, solo cambiar inputs) es **inválida** — rompe el invariante 4 sin querer. Solo Opción B (usar el actor para los dos forward passes) es correcta. Ver §6.2.
+> - El LOC estimate de 30-100 / 40-65 es **optimista al borde de falso**. Estimación corregida: **100-180 LOC**. Ver §6.4.
+> - `update=none` **no** salta el init del reward model — solo evita el `optimizer.step()`. Sigue cargando un Qwen2.5-7B extra en GPU. Ver §6.1.
+> - Goal injection requiere ~25-40 LOC de plumbing real, no 10-15. Ver §6.3.
+> - El score se computa token-level y se colapsa al final → posible leakage de tokens `<think>` privilegiados. Cruza con Apuesta A de [`piar-delta.md`](piar-delta.md) §4.1. Ver §6.5.
 
 ---
 
@@ -85,13 +96,15 @@ if self.use_rm:
         # ...
 ```
 
-**Propuesto:** dos opciones equivalentes (preferir A por mínimo cambio de código):
+**Propuesto:** dos opciones aparentemente equivalentes — **⚠️ pero ver §6.1 antes de elegir Opción A**.
 
-**Opción A — config-only**: cambiar en `code/examples/istar_trainer/run_webshop.sh:56` el flag `reward_model.model.update=after` → `reward_model.model.update=none`. El branch `update_style == "none"` (`ray_trainer.py:1244-1245`) ya llama `compute_rm_score` puro sin DPO update. **Cero líneas de código tocado en `ray_trainer.py`.** Eliminación del training del PRM sin perder el path de scoring.
+**Opción A — config-only**: cambiar en `code/examples/istar_trainer/run_webshop.sh:56` el flag `reward_model.model.update=after` → `reward_model.model.update=none`. El branch `update_style == "none"` (`ray_trainer.py:1244-1245`) ya llama `compute_rm_score` puro sin DPO update.
 
-**Opción B — code-level**: agregar `elif update_style == "piar":` que llame un nuevo `compute_piar_rm_score`. Más explícito pero más LOC.
+> **⚠️ Caveat post-Codex (§6.1):** Opción A **NO salta el init del reward model**. `main_ppo` igual instancia `Role.RewardModel`, `ray_trainer` llama `rm_wg.init_model()`, y `rm_fsdp_workers.py` carga modelo + optimizer + scheduler + checkpoint manager (`code/istar/rm_fsdp_workers.py:115-265`). Solo se evita `optimizer.step()`. Costo: ~14 GB de VRAM extra ocupados por un Qwen2.5-7B duplicado e inútil. Si Opción A se mantiene, agregar guards en `main_ppo.py` para no instanciar el RM worker cuando `update=none` (~10-15 LOC extra). Si se va por Opción B-real (§6.2), el RM worker entero deja de tener sentido y se puede bypasear.
 
-**Justificación:** PIAR no entrena el numerador. El mismo modelo `π_old` se usa con y sin golden — el log-ratio mide solo diferencia de contexto. Recomendado: **Opción A**.
+**Opción B — code-level**: agregar `elif update_style == "piar":` que llame un nuevo `compute_piar_rm_score`. Más explícito pero más LOC. **Esto NO es la "Opción B preferida" que aparece en §2.2 — son dos cosas distintas.** Esta variante 2.1 sigue usando el RM worker.
+
+**Justificación:** PIAR no entrena el numerador. El mismo modelo `π_old` se usa con y sin golden — el log-ratio mide solo diferencia de contexto. **Recomendado: ver §2.2 + §6.2 — el cambio operativo importante NO está en este nivel, está en el de §2.2.**
 
 #### Cambio 2.1.2 — `rm_fsdp_workers.py:215-219` (optimizer)
 
@@ -105,7 +118,7 @@ reward_optimizer = optim.AdamW(
 )
 ```
 
-**Propuesto:** con Opción A de 2.1.1, el optimizer queda construido pero **nunca se llama** (porque ni `update_rm` ni `update_rm_eto` se invocan). Cero líneas a tocar. Si se quiere ser estrictos y ahorrar memoria: agregar guard `if config.model.get("update", "none") == "none":` y skipear `reward_optimizer` + `reward_lr_scheduler` (~3-5 LOC). **Recomendado: no tocar todavía** — sumar guard solo si la memoria es un cuello de botella real.
+**Propuesto:** con Opción A de 2.1.1, el optimizer queda construido pero **nunca se llama**. Cero líneas a tocar para el código que existe. **⚠️ Pero ver §6.1**: el optimizer está cargado en VRAM aunque no se invoque. Si Opción A se mantiene **y** la memoria es restrictiva: guard `if config.model.get("update", "none") == "none":` para skippear `reward_optimizer` + `reward_lr_scheduler` (~3-5 LOC), o mejor, bypass entero del RM worker desde `main_ppo`. Si se va por la opción correcta (§2.2 Opción B = usar el actor, no el RM worker), todo esto queda muerto sin acción adicional.
 
 ### 2.2 Reescritura del log-ratio: PRM frozen → snapshot policy con golden
 
@@ -113,21 +126,19 @@ reward_optimizer = optim.AdamW(
 
 **Actual:** `_build_reward_ref_model_optimizer` carga `reward_module` desde `config.model.path` (línea 89, 120-126), que es **el mismo path que el policy** (`run_webshop.sh:11+54`: `reward_model.model.path=$model_path`).
 
-**Propuesto:** mantener la carga inicial (el modelo ES el mismo). Lo crítico es que **antes de cada llamada a `compute_rm_score`** se **sincronicen los pesos** del `reward_module` con los del `actor_rollout_wg` (snapshot reciente `π_old`). Hay dos sub-opciones:
+**Sub-opciones — ⚠️ ver §6.2: solo una es correcta**:
 
-**Opción A — sync explícito de pesos del actor al RM worker** antes de cada `compute_rm_score`. Requiere agregar un `@register` method que copie state_dict del actor al RM. ~15-25 LOC nuevas en `rm_fsdp_workers.py` + ~3-5 LOC en `ray_trainer.py` que invoca el sync.
+**❌ Opción A (INVÁLIDA) — sync explícito de pesos del actor al RM worker** antes de cada `compute_rm_score`. Sería agregar un `@register` method que copie state_dict del actor al RM (~15-25 LOC). **Por qué no funciona**: el RM worker se carga UNA VEZ desde `model.path` y queda **desacoplado** del actor que PPO sigue actualizando. Sin sync explícito el numerador deja de ser `π_old(a|s, golden)` y pasa a ser `π_init(a|s, golden)` (modelo del step 0 con golden). Después del primer update PPO, `θ_inicial ≠ θ_t`, y el log-ratio mezcla "info que aporta el golden" con "weight-drift inicial→actual" — **se rompe el invariante 4 sin querer** (mismos pesos del student). Esto es exactamente la razón por la cual C.2 cambió de frozen θ₀ a `π_old` el 2026-05-11. Mantener el RM worker estático reintroduce el problema en la implementación. Para que Opción A funcione habría que agregar el sync explícito en cada step — entonces ya tenés dos modelos en VRAM Y un sync overhead — peor que B en todas las dimensiones.
 
-**Opción B (recomendada) — eliminar `reward_module` y reusar el actor.** En vez de tener dos modelos en GPU, usar `self.actor_rollout_wg.compute_log_prob(batch_with_golden)` directamente (existe ya en `code/verl/workers/fsdp_workers.py:665-705`). Esto pone toda la lógica de PIAR fuera del `ISTARRewardModelWorker`. Ver Cambio 2.2.3.
+**✅ Opción B (la única correcta) — eliminar `reward_module` y reusar el actor.** En vez de tener dos modelos en GPU, usar `self.actor_rollout_wg.compute_log_prob(batch_with_golden)` directamente (existe ya en `code/verl/workers/fsdp_workers.py:665-705`). Esto pone toda la lógica de PIAR fuera del `ISTARRewardModelWorker`. Como el actor SÍ se actualiza con PPO, sus weights son `θ_t = π_old` por definición. El log-ratio queda puro: `log[π_old(a|s, golden)] - log[π_old(a|s)]`. Invariante 4 preservado. Ver Cambio 2.2.3.
 
 #### Cambio 2.2.2 — `dp_rm.py:53-208` (`_forward_micro_batch`)
 
 **Actual:** computa `rm_log_labels` con `self.reward_module(input_ids=micro_batch["input_ids"], ...)` (línea 101-106) y `ref_log_labels = micro_batch["old_log_probs"]` (línea 158, default cuando `ref_module is None`).
 
-**Sub-opciones según 2.2.1:**
+**Con Opción B (la única correcta):** `dp_rm.py` entero queda como **dead code** accesible solo bajo `update=after` legacy. La llamada `self.rm_wg.compute_rm_score(batch)` se reemplaza por un nuevo método `compute_piar_step_reward` (~50-80 LOC) que internamente hace dos llamadas a `actor_rollout_wg.compute_log_prob` — una con prompt + golden, otra con prompt sin golden — y computa `q = teacher_log_probs - student_log_probs` con el mismo agregado step-level que `dp_rm.py:199-204`. Ver Cambio 2.2.3.
 
-- **Si Opción A de 2.2.1:** la firma de `_forward_micro_batch` no cambia, pero el `input_ids` del micro_batch que llega ahora **incluye el golden inyectado** (ver Sección 3). El log-ratio `q = rm_log_labels - ref_log_labels` (`dp_rm.py:161`) pasa a ser exactamente PIAR: `log[π_old(a|s, golden)] - log[π_old(a|s)]`. **Cero líneas tocadas en `dp_rm.py`** si el batch ya llega con el input correcto. La inyección del golden se hace **antes** de pasar el batch al RM worker.
-
-- **Si Opción B (preferida):** se reemplaza la llamada `self.rm_wg.compute_rm_score(batch)` por un nuevo método `compute_piar_step_reward` (~30-50 LOC) que internamente hace dos llamadas a `actor_rollout_wg.compute_log_prob` — una con prompt + golden, otra con prompt sin golden — y computa `q = teacher_log_probs - student_log_probs` con el mismo agregado step-level que `dp_rm.py:199-204`. Ver Cambio 2.2.3 abajo.
+**⚠️ Riesgo verificable (§6.1)**: `dp_rm.py:226-229` hace `self.ref_module.eval()` sin guard `if self.ref_module is not None`. En el config actual (`run_webshop.sh:53`: `ref_path=null`), ese código no se ejecuta porque `compute_rm_score` ni se llama bajo Opción B. **Pero si se entra por `update=none` con el RM worker cargado (Opción A o un híbrido)**, hay riesgo de crash `NoneType.eval()`. Mitigación: ir directo a Opción B; o agregar el guard si se quiere tocar lo menos posible.
 
 #### Cambio 2.2.3 — Nueva función `compute_piar_step_reward` (recomendado)
 
@@ -217,7 +228,14 @@ if self.use_rm:
 
 **Persistencia durante el episodio** (`code/agent_system/environments/env_package/webshop/webshop/web_agent_site/envs/web_agent_text_env.py:519-528`): cuando `reset(session=idx)` se llama, el `SimServer.receive` setea `self.user_sessions[session_id] = {'goal': goal, 'done': False}` (línea 521). El goal vive ahí hasta el reset siguiente.
 
-**Acceso disponible:** el worker pipe ya expone el getter `'get_goals'` (`envs.py:71-72` devuelve `env.server.goals`). Hace falta UN getter nuevo `'get_current_goal'` que devuelva `env.server.user_sessions[env.session]['goal']` para acceder al goal del episodio actual (no la lista completa). ~5 LOC agregadas en `envs.py:71-72` (extender el handler) + ~3 LOC en `WebshopMultiProcessEnv` para exponer el método.
+**⚠️ Plumbing real (§6.3)**: el `'get_goals'` que expone `envs.py:71-72` devuelve la **lista global** de todos los goals del dataset (`env.server.goals`), no el goal del episodio actual. Lo que necesitamos vive en `env.server.user_sessions[session_id]['goal']` y nadie lo expone hoy. Plus: el `reset/step` del worker pipe no devuelve el goal en `info` (`code/agent_system/environments/env_package/webshop/envs.py:60-72`, `rollout_loop.py:328-356`). Costo real: **25-40 LOC** distribuidas en:
+
+- `envs.py:71-72` — extender el handler con `'get_current_goal'` + `'get_current_goals_all_envs'` (multi-process). ~8-10 LOC.
+- `WebshopMultiProcessEnv` (`envs.py`, clase) — método `get_current_goals()` que recolecta de cada subproceso via pipe. ~8-10 LOC.
+- `WebshopEnvironmentManager` (`env_manager.py`) — atributo `self.current_goals: list[dict]` actualizado en `reset` y propagado a `step`. ~8-10 LOC.
+- `rollout_loop.py:336-339` — pasar `current_goals` al batch como `non_tensor_batch['golden_dict']`. ~3-5 LOC.
+
+Total: 25-40 LOC, no 10-15 como decía la primera versión del doc.
 
 ### 3.2 Cómo serializar el golden al prompt del teacher
 
@@ -296,10 +314,19 @@ Implementación: ~5 LOC para shuffling en `compute_piar_step_reward` cuando `con
 
 | Opción | Pros | Contras |
 |---|---|---|
-| **Vía env (Opción A propuesta)**: getter `get_current_goal` en cada step, propagado a `non_tensor_batch["golden_dict"]` en el rollout loop. | Goal siempre sincronizado con el episodio real. D.9 (shuffled) se implementa shuffleando el atributo en el batch. | ~10 LOC en `envs.py` + `env_manager.py` + `rollout_loop.py` para propagar. |
+| **Vía env (Opción A propuesta)**: getter `get_current_goal` en cada step, propagado a `non_tensor_batch["golden_dict"]` en el rollout loop. | Goal siempre sincronizado con el episodio real. D.9 (shuffled) se implementa shuffleando el atributo en el batch. | ~25-40 LOC en `envs.py` + `env_manager.py` + `rollout_loop.py` (⚠️ §6.3 — más plumbing que lo estimado originalmente). |
 | **Vía dataset offline**: pre-extraer golden por `session_idx` en preprocessing y joinear al batch. | Cero cambios al env durante rollout. | Requiere modificar `examples/data_preprocess/prepare.py` y el dataset parquet. Más fricción, peor para iteración rápida. |
 
-**Recomendado:** Vía env. ~10-15 LOC totales para propagar el golden_dict por episodio hasta el batch.
+**Recomendado:** Vía env. **~25-40 LOC totales** (revisado post-Codex, ver §3.1 + §6.3) para propagar el golden_dict por episodio hasta el batch.
+
+### 4.6 Riesgos nuevos identificados post-review Codex (2026-05-12)
+
+| Riesgo | Severidad | Mitigación |
+|---|---|---|
+| **Sync actor/RM rompe invariante 4** — si se elige Opción A de §2.2 (mantener `reward_module`), el numerador queda en `π_init` en vez de `π_old` después del primer PPO update. Mezcla "info que aporta el golden" con "weight-drift inicial→actual". **Esto reintroduce el problema que C.2 cerró el 2026-05-11.** | 🔴 Crítico (rompe invariante) | Ir directo a Opción B de §2.2 (usar el actor para los dos forward passes). NO mantener el RM worker como teacher. Ver §6.2. |
+| **`update=none` carga el RM igual** — `main_ppo` instancia `Role.RewardModel`, `ray_trainer` llama `rm_wg.init_model()`, `rm_fsdp_workers.py:115-265` carga modelo + optimizer + scheduler + checkpoint manager. Solo se evita `optimizer.step()`. Costo: ~14 GB VRAM extra ocupados por un Qwen2.5-7B duplicado e inútil. | 🟠 Alto (memoria + plata en spot) | Con Opción B de §2.2 se bypasea natural: el RM worker no se usa. Si por error queda activo: agregar guard en `main_ppo.py` para no instanciar `Role.RewardModel` cuando `update=none` (~10-15 LOC). Ver §6.1. |
+| **Crash latente `ref_module=None`** — `dp_rm.py:226-229` hace `self.ref_module.eval()` sin guard. Con `update=none` ese path no se invoca, pero es una mina si se cambia el flow. | 🟡 Verificable (no bloquea Opción B) | Si Opción B: irrelevante (`dp_rm.py` queda muerto). Si por algún motivo se invoca: agregar `if self.ref_module is not None:` antes de la línea 226 (~1 LOC). Ver §6.1. |
+| **Token-flow del `rm_scores` puede premiar el `<think>` privilegiado** — `dp_rm.py` calcula log-ratio sobre **todos los tokens de la respuesta** y después suma al final. Si la respuesta es `<think>El golden dice X, busco X</think>Acción: X`, el reward acumula sobre el reasoning que solo tiene sentido con golden en contexto — puede empujar al policy a optimizar razonamiento condicionado al golden, no la decisión de acción. Cruza con Apuesta A de [`piar-delta.md`](piar-delta.md) §4.1. | 🟠 Alto (riesgo científico) | Loggear contribución del log-ratio por tipo de token: think vs action vs other. Si la masa del reward está en `<think>` y no en `Acción:`, considerar (a) computar `rm_scores` solo sobre el span de la acción ReAct (no el `<think>`), o (b) reportar como hallazgo independiente. Ver §6.5. |
 
 ### 4.4 Otras cosas a verificar
 
@@ -319,26 +346,31 @@ Implementación: ~5 LOC para shuffling en `compute_piar_step_reward` cuando `con
 
 ## Sección 5 · Estimación de líneas tocadas + roadmap de implementación
 
-### 5.1 Conteo de LOC por archivo
+### 5.1 Conteo de LOC por archivo (revisado post-Codex 2026-05-12)
+
+> ⚠️ La versión original de esta tabla decía 40-65 LOC in-place o 80-160 LOC con archivo nuevo. Codex marcó esa estimación como "optimista al borde de falso". Tabla corregida abajo. Ver §6.4.
 
 | Archivo | Cambios | LOC est. | Tipo |
 |---|---|---|---|
-| `code/examples/istar_trainer/run_webshop.sh` | `update=after` → `update=none`. Opcional: agregar `algorithm.piar.shuffle_golden=False`, `algorithm.piar.golden_template=opsd`. | 2-5 | config |
-| `code/verl/trainer/ppo/ray_trainer.py:1242-1268` | Si Opción B (recomendada): reemplazar dispatch por llamada a `compute_piar_step_reward`. | 20-25 net (delta) | reemplazo |
-| `code/istar/piar_step_reward.py` (nuevo) | Función `compute_piar_step_reward` + helper `inject_golden_into_prompt`. | 60-90 | nuevo archivo |
-| `code/agent_system/environments/env_package/webshop/envs.py:71-72` | Extender handler con `'get_current_goal'`. | 5-8 | extensión |
-| `code/agent_system/environments/env_package/webshop/envs.py` (clase `WebshopMultiProcessEnv`) | Método `get_current_goals()` que devuelve list[dict] uno por sub-env. | 5-10 | extensión |
-| `code/agent_system/environments/env_manager.py` (`WebshopEnvironmentManager`) | Propagar `goals` desde reset/step a infos o atributo `self.current_goals`. | 5-10 | extensión |
-| `code/agent_system/multi_turn_rollout/rollout_loop.py:336-339` | Agregar `batch.non_tensor_batch['golden_dict'] = envs.current_goals` por step (cachear por trayectoria). | 5-8 | extensión |
-| `code/istar/rm_fsdp_workers.py` | **Opcional**: guard para skip optimizer cuando `update=none`. **No tocar** en primera iteración. | 0-5 | opcional |
-| `code/istar/dp_rm.py` | **Nada** si Opción B. La función entera queda como dead code accesible via `update=after` legacy. | 0 | sin cambios |
+| `code/examples/istar_trainer/run_webshop.sh` | `update=after` → `update=none`. Agregar `algorithm.piar.shuffle_golden=False`, `algorithm.piar.golden_template=opsd`. | 3-5 | config |
+| `code/verl/trainer/main_ppo.py` | Guard para no instanciar `Role.RewardModel` cuando `update=none` (evitar 14 GB VRAM desperdiciados, §6.1). | 10-15 | extensión |
+| `code/verl/trainer/ppo/ray_trainer.py:1242-1268` | Reemplazar dispatch por llamada a `compute_piar_step_reward`. | 20-25 net | reemplazo |
+| `code/istar/piar_step_reward.py` (nuevo) | Función `compute_piar_step_reward` + helper `inject_golden_into_prompt` + token-flow logging (§6.5). | 80-120 | nuevo archivo |
+| `code/agent_system/environments/env_package/webshop/envs.py:60-72` | Extender handler con `'get_current_goal'` + lógica multi-process en clase `WebshopMultiProcessEnv` (§3.1 + §6.3). | 16-20 | extensión |
+| `code/agent_system/environments/env_manager.py` (`WebshopEnvironmentManager`) | Atributo `current_goals` actualizado en `reset` + `step` + propagación al `info` (§6.3). | 8-12 | extensión |
+| `code/agent_system/multi_turn_rollout/rollout_loop.py:328-356` | Pasar `current_goals` al batch como `non_tensor_batch['golden_dict']`. Cachear por `traj_uid`. | 5-8 | extensión |
+| `code/istar/rm_fsdp_workers.py` | Si se mantiene el RM worker (NO recomendado): guard `if self.ref_module is not None` en `dp_rm.py:226-229` (§6.1). Con Opción B: irrelevante. | 0-3 | conditional |
+| `code/istar/dp_rm.py` | Dead code bajo Opción B. **Nada que tocar.** | 0 | sin cambios |
 | `code/istar/core_istar.py` | **Nada.** | 0 | sin cambios |
 
-**Total estimado: ~100-160 LOC** considerando el archivo nuevo (`piar_step_reward.py` con docstrings y helpers). 
+**Total estimado revisado: 142-208 LOC**. Si querés ser optimista y skippear el guard en `main_ppo`, y minimizar el token-flow logging, podés bajar a ~120-160 LOC. **Honestidad: la promesa original "30-100 LOC" se sobrepasa**. La razón es que el plumbing real (env-side goal propagation + main_ppo guard + token-flow logging) tiene más fricción que lo estimado inicialmente.
 
-**Si excluimos el nuevo archivo y contamos solo deltas en archivos existentes: ~40-65 LOC**, dentro del rango 30-100 prometido.
+**Por qué se sobrepasa el rango original**:
+- Goal injection vía env: subestimado (15 LOC → 25-40 LOC real). Codex §6.3.
+- Bypass real del RM worker: requiere editar `main_ppo.py`, no solo el config. §6.1.
+- Token-flow logging para validar Apuesta A: 10-20 LOC extra para diagnosticar si el reward se concentra en `<think>` o en acción. §6.5.
 
-**Honestidad sobre el rango 30-100:** se cumple **estrictamente** si contamos solo deltas en archivos existentes (40-65 LOC). El archivo nuevo `piar_step_reward.py` agrega ~60-90 LOC adicionales pero es código aislado, fácil de revisar, no entrelazado con el framework. Si se quisiera meter inline en `ray_trainer.py` se llegaría a 90-110 LOC totales — al límite alto pero defendible. **Recomendación: archivo nuevo separado, por trazabilidad.**
+**Lectura honesta**: el research sigue siendo defendible, pero **la promesa "30-100 líneas" del NOTICE.md y del primer mapeo no se cumple**. Estimación realista: **~150 LOC totales** para una implementación correcta y verificable. Actualizar NOTICE.md + design-decisions.md A.2 si se quiere mantener la promesa visible alineada con la realidad.
 
 ### 5.2 Roadmap de implementación (orden propuesto)
 
@@ -354,11 +386,13 @@ Implementación: ~5 LOC para shuffling en `compute_piar_step_reward` cuando `con
 | 7 | **D.9 — shuffled-golden control** (decisión cerrada como requisito). Re-correr con `shuffle_golden=True` y comparar. Si shuffled ≥ correct, hay leakage masivo y abortar. | Punto 8 | 3-5 días compute |
 | 8 | **D.1 — leakage en muestras pareadas** (decisión cerrada como requisito). Analizar trayectorias correctas que copian texto del golden vs las que razonan. | Producción del paper | 2-3 días análisis |
 
-### 5.3 Riesgo residual de la estimación
+### 5.3 Riesgo residual de la estimación (revisado post-Codex)
 
 Si al implementar aparece:
-- **Mismatch de logprobs** entre actor.compute_log_prob y reward_module (por kernel fused vs non-fused, o ulysses sharding distinto): puede sumar 20-40 LOC para forzar consistencia. Total subiría a ~100-200 LOC. **Mitigación:** usar SIEMPRE `actor_rollout_wg.compute_log_prob` para los dos términos (Opción B 2.2.1).
-- **El env worker pipe no expone bien el goal** (es Flask subyacente, puede haber estado mutable raro entre steps): puede sumar 10-15 LOC de defensive coding. Total ~120-180 LOC.
+- **Mismatch de logprobs** entre `actor.compute_log_prob` y `reward_module` (por kernel fused vs non-fused, o ulysses sharding distinto): irrelevante bajo Opción B (un solo path para los dos términos). **Mitigación ya aplicada en la estimación.**
+- **El env worker pipe no expone bien el goal** (es Flask subyacente, puede haber estado mutable raro entre steps): puede sumar 10-15 LOC de defensive coding. Total ~160-220 LOC.
+- **Token-flow del reward concentrado en `<think>`**: si la diagnóstica de §6.5 confirma el problema, agregar action-span masking (~15-25 LOC) para que `rm_scores` capture solo los tokens de la acción real, no el reasoning privilegiado. Total ~175-240 LOC.
+- **Chat template de Qwen2.5-Instruct rompe inyección inline del golden**: el formato `<|im_start|>system\n...<|im_end|>` puede forzar a meter el golden como system message separado en vez de inline. ~5-10 LOC de template handling.
 - **La inyección textual rompe el chat template** (Qwen2.5-Instruct usa `<|im_start|>system\n...<|im_end|>` etc.): puede que el golden tenga que ir como system message separado, no inline en user. Sumar 5-10 LOC de template handling.
 
 **Conclusión honesta:** 30-100 LOC se sostiene como **mínimo viable** (Opción A en todo). El path recomendado (Opción B con archivo nuevo) está en **80-160 LOC** — un poquito sobre el límite alto, pero estructuralmente mucho más limpio y trazable. Lucas decide.
@@ -397,3 +431,117 @@ PROMPT:    code/agent_system/environments/prompts/webshop.py:1-29
 REWARD:    code/agent_system/reward_manager/episode.py:23-122 (outcome ONLY, not PRM)
 ACTOR LP:  code/verl/workers/fsdp_workers.py:665-705 (compute_log_prob — reusable for PIAR)
 ```
+
+---
+
+## Sección 6 · Adendum post-review Codex (2026-05-12)
+
+> **Contexto:** la primera versión de este doc (commit `4f3505a`) fue revisada críticamente por Codex (`gpt-5.4`) el 2026-05-12. El review identificó 5 hallazgos relevantes que cambian el framing en partes específicas del doc. Esta sección es la **fuente de verdad** para esas correcciones. Cada hallazgo lleva un marker ⚠️ inline en el cuerpo del doc apuntando acá.
+
+### 6.1 `update=none` no salta el init del RM worker
+
+**Lo que decía la v1:** cambiar `update=after` → `update=none` en `run_webshop.sh:56` bypassea el training del PRM (1 línea de config).
+
+**Lo que es cierto:** `update=none` evita `optimizer.step()` y `update_rm_eto`, pero **NO evita la instanciación del RM worker**. `main_ppo.py:133-134` igual importa `ISTARRewardModelWorker` y lo registra como `Role.RewardModel`. `ray_trainer.py` igual llama `rm_wg.init_model()`. `rm_fsdp_workers.py:115-265` igual:
+
+- Carga `reward_module = AutoModelForCausalLM.from_pretrained(config.model.path, ...)` → **+14 GB VRAM** (Qwen2.5-7B duplicado).
+- Carga `reward_optimizer = optim.AdamW(...)` → memoria de Adam states (~2× params en bf16).
+- Carga `lr_scheduler` y `checkpoint_manager` → overhead administrativo.
+
+**Implicación:** si dejamos `update=none` sin más, estamos cargando un Qwen2.5-7B inútil + optimizer states en VRAM. En `Standard_NC80adis_H100_v5` (2×H100 NVL = 192 GB) tenemos headroom, pero igual es desperdicio + se come KV cache de vLLM.
+
+**Mitigación correcta:** con Opción B de §2.2 (usar el actor), el RM worker entero deja de tener sentido. Bypass desde `main_ppo.py`: guard `if config.reward_model.enable and config.reward_model.model.update != "none":` antes de registrar `Role.RewardModel`. ~10-15 LOC.
+
+**Adicionalmente:** `dp_rm.py:226-229` hace `self.ref_module.eval()` sin guard. Con `ref_path=null` y `update=none`, ese codepath no debería invocarse (porque `compute_rm_score` no se llama). Pero si por accidente se entra: crash `NoneType.eval()`. Guard de 1 LOC `if self.ref_module is not None:` para safety.
+
+### 6.2 Opción A de §2.2 (mantener RM worker como teacher) es INVÁLIDA
+
+**Lo que decía la v1:** dos sub-opciones de §2.2 — Opción A (sync state_dict del actor al RM antes de cada step, ~15-25 LOC) y Opción B (usar el actor directamente, recomendada).
+
+**Lo que es cierto:** Opción A **rompe el invariante 4** (mismos pesos del student) si se implementa sin sync explícito. El `reward_module` se carga UNA VEZ desde `model.path` (`rm_fsdp_workers.py:115-126`) y **queda desacoplado** del actor que PPO sigue actualizando. Después del primer update:
+
+- Actor: `θ_t` (snapshot reciente, `π_old` por definición operacional).
+- `reward_module`: `θ_0` (snapshot inicial, congelado por accidente).
+
+El log-ratio computado: `log[π_θ₀(a|s, golden)] - log[π_θ_t(a|s)]`. **Esto mezcla "efecto del contexto golden" con "weight drift desde el SFT inicial"**. Es exactamente el problema que la decisión C.2 (2026-05-11) cerró al pasar de "frozen θ₀" a "`π_old` snapshot reciente". Mantener el RM worker estático reintroduce el bug en la implementación.
+
+**Si querés rescatar Opción A**, habría que agregar sync explícito `actor.state_dict() → reward_module.load_state_dict()` antes de cada `compute_rm_score`. Eso:
+- Suma ~15-25 LOC.
+- Mantiene dos modelos en VRAM (no ahorra memoria vs Opción B).
+- Suma overhead de copia per-step (bandwidth NVMe/PCIe si los modelos están sharded).
+- Es estrictamente peor que Opción B en todas las dimensiones.
+
+**Veredicto:** ❌ Opción A es inválida. **Solo Opción B (usar `actor_rollout_wg.compute_log_prob` para los dos forward passes) preserva invariante 4 y es eficiente.** El doc en su v1 las presentaba como alternativas equivalentes "preferir B" — pero la realidad es que A está mal, no es solo menos elegante.
+
+### 6.3 Goal injection requiere 25-40 LOC, no 10-15
+
+**Lo que decía la v1:** ~10-15 LOC para propagar el `golden_dict` desde `web_agent_text_env.py:519-521` al `non_tensor_batch`.
+
+**Lo que es cierto:** el plumbing tiene más fricción del que reportó la v1.
+
+- El getter actual `'get_goals'` en `envs.py:71-72` devuelve la **lista global** de todos los goals del dataset (`env.server.goals`), no el goal del episodio actual. Hay que agregar un getter nuevo `'get_current_goal'` que lea `env.server.user_sessions[session_id]['goal']`.
+- `WebshopMultiProcessEnv` corre los envs en subprocesos via worker pipe. El método nuevo tiene que recolectar de TODOS los subprocesos (no solo uno).
+- `WebshopEnvironmentManager` (`env_manager.py:306-450`) no propaga el goal en `info` del `step` ni del `reset`. Hay que agregar atributo `self.current_goals: list[dict]` actualizado en ambos.
+- `rollout_loop.py:328-356` no expone goal al batch — hay que pasar `current_goals` como `non_tensor_batch['golden_dict']`.
+
+**Total real:** 25-40 LOC distribuidas en 4 archivos. No es bloqueante ni difícil, pero la estimación original era plana.
+
+### 6.4 LOC estimate revisado: 100-180 (probable 150)
+
+**Lo que decía la v1:** 40-65 LOC in-place o 80-160 LOC con archivo nuevo. "Cumple promesa 30-100 estrictamente".
+
+**Lo que es cierto:** revisada con los items 6.1 + 6.2 + 6.3, la estimación honesta es **142-208 LOC totales** (ver tabla §5.1 actualizada). Si se buscan corners cuts (skippear el guard en `main_ppo`, minimizar token-flow logging): 120-160 LOC. **La promesa "30-100 LOC" del NOTICE.md y design-decisions.md A.2 no se cumple — actualizar esos docs.**
+
+**Por qué se sobrepasa el rango original:**
+- Goal injection real: +15-25 LOC sobre el estimate (§6.3).
+- Bypass del RM worker desde `main_ppo`: +10-15 LOC nuevas (§6.1).
+- Token-flow logging para Apuesta A: +10-20 LOC (§6.5).
+- LOC del archivo nuevo `piar_step_reward.py` más realista: 80-120 (no 60-90), porque incluye logging + handler de chat template + cachear golden por traj_uid.
+
+**Honestidad para el paper:** "30-100 LOC" se sostiene como **mínimo viable** si aceptamos un PoC con corners cuts y sin logging diagnóstico. Para la versión **publicable** (con verificación de Apuesta A + bypass limpio del RM worker), la cifra honesta es **~150 LOC**. Esto no invalida el research — sigue siendo una modificación quirúrgica de un orden de magnitud menor que reimplementar iStar — pero la promesa fuerte "30-100" requiere asterisco.
+
+### 6.5 Token-flow del `rm_scores` cruza con Apuesta A
+
+**Lo que decía la v1:** la decisión B.3 (action-level granularity) está cerrada porque `dp_rm.py:199-204` colapsa el reward a la última posición válida del step.
+
+**Lo que es cierto:** el reward **se compone token por token** sobre toda la respuesta (`q = teacher_log_probs - student_log_probs` en `dp_rm.py:161` produce un tensor `(bs, response_length)`), y después se **agrega via suma** al asignarlo a `max_positions[i] - 1`. Es decir: cada token de la respuesta contribuye linealmente al reward final del step.
+
+**Implicación científica:** si la respuesta del agente tiene estructura `<think>...razonamiento...</think>Acción: X`, el log-ratio acumula sobre TODOS los tokens del `<think>` + la acción. Como el `<think>` puede contener referencias explícitas al golden ("El target dice Samsung, busco Samsung"), el reward puede **premiar el razonamiento condicionado al golden** más que la decisión de acción.
+
+**Conexión con Apuesta A (`piar-delta.md` §4.1):** la Apuesta A dice "action-level granularity gana sobre token-level". Pero como está implementado, **el actual "action-level" es realmente "todos los tokens del response colapsados al final"** — semánticamente token-level con post-agregación. La granularidad estricta action-level requeriría masking del `<think>` para que solo los tokens de la acción real contribuyan al reward.
+
+**Acción propuesta**:
+1. **Diagnóstico primero**: durante el smoke run, loggear contribución del log-ratio por tipo de token (think / action / other) — qué % de la masa del reward viene de cada categoría. ~10-20 LOC en `compute_piar_step_reward`.
+2. **Si el reward se concentra en `<think>`**: agregar masking de `<think>` tokens en el agregado step-level (~15-25 LOC). Esto cambia la implementación operacional de Apuesta A.
+3. **Si el reward se concentra en `Acción:`** (poco probable, pero posible): el setup actual ya valida B.3 sin más cambios. Documentar.
+
+**Cruza con D.1 (`design-decisions.md`)** — el análisis de leakage textual incluiría ahora dos dimensiones: (a) leakage en la decisión de acción (¿copia text del golden literalmente?), (b) leakage en el reward signal (¿la masa del log-ratio premia el razonamiento o la acción?).
+
+### 6.6 Veredicto general de Codex
+
+Textual del review:
+
+> *"La dirección general es sólida. La versión 'config-only + input replacement' no lo es."*
+
+**Lectura:** el método PIAR es defendible. La implementación requiere más cuidado del que la v1 del mapeo reflejaba. Las correcciones 6.1-6.5 alinean el plan operacional con la realidad del codebase.
+
+**Lo que NO cambia post-Codex:**
+- `dp_rm.py:161` sigue siendo el log-ratio framework — PIAR sigue siendo "reemplazo de inputs" en spirit.
+- `core_istar.py` sigue intocable.
+- La arquitectura general (actor con dos forward passes + golden injection vía env) es correcta.
+- El roadmap de §5.2 sigue siendo válido.
+
+**Lo que SÍ cambia:**
+- Opción A de §2.2 marcada como inválida.
+- LOC estimate de 40-65 → ~150.
+- Plumbing del golden subestimado (10-15 → 25-40).
+- Riesgo nuevo identificado: token-flow puede premiar `<think>` privilegiado.
+- Bypass real del RM worker requiere `main_ppo.py` edit, no solo config.
+
+### 6.7 Próximos pasos sugeridos para fase 4
+
+Actualizar antes de arrancar implementación:
+1. **`NOTICE.md`** — cambiar "modificación esperada chica (~30-100 líneas)" a "~150 líneas".
+2. **`design-decisions.md` A.2** — alinear LOC estimate.
+3. **Issue #16** — agregar criterio de cierre: además de replicar baseline iStar, validar que `update=none` con el bypass del RM worker no rompa el smoke run.
+4. **Nuevo issue D.10 (candidato)** — token-flow analysis como prerequisito de Apuesta A. Cierra una pregunta científica antes de gastar GPU-días.

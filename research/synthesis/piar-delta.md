@@ -138,6 +138,8 @@ Si PIAR es **publicable como contribución independiente del análisis de leakag
 
 **Cómo se valida:** ablation directa PIAR (action-level) vs versión token-level del mismo método, mismo modelo, mismo benchmark. Si la diferencia es < 1 punto, la apuesta no se sostiene.
 
+**⚠️ Caveat de implementación (post-Codex review 2026-05-12, ver [`piar-implementation-points.md`](piar-implementation-points.md) §6.5):** lo que iStar llama "action-level" es realmente "**todos los tokens de la respuesta colapsados al final del span**" — el log-ratio se compone token-por-token sobre la respuesta entera y después se suma. Si la respuesta del agente tiene `<think>razonamiento privilegiado</think>Acción: X`, el reward acumula también sobre el `<think>` que puede contener referencias explícitas al golden. **Apuesta A en su forma estricta** (señal solo sobre el span de la acción real, sin `<think>`) requiere masking adicional del reasoning. Diagnóstico previo (loggear contribución del log-ratio por tipo de token) determina si hay que activar este masking — agregar como D.10 candidata en `design-decisions.md`.
+
 ### 4.2 Apuesta B — Log-ratio como reward gana sobre KL como regularizador (🟡)
 
 **Hipótesis:** integrar la señal del teacher como step reward (con clipping y normalización de PPO/GRPO sobre el step advantage) es más estable y se combina mejor con outcome reward que el KL como término del loss con β fijo.
