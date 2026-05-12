@@ -3,12 +3,14 @@
 ## START HERE — Read these docs first
 
 1. **README.md** — Entry point. Navegación + setup rápido.
-2. **PROJECT.md** — Vision, LA PREGUNTA, invariantes, jerarquía de decisión.
+2. **PROJECT.md** — Vision, LA PREGUNTA, invariantes, jerarquía de decisión, **reformulación operativa contra iStar (2026-05-11)**.
 3. **CURRENT_STATE.md** — Qué corre HOY, qué se está construyendo.
-4. **`.claude/skills/tracking/SKILL.md`** — Workflow operativo de issues + Project v2.
-5. **CHANGELOG.md** — Historial con refs `#N` a issues de GitHub.
-6. **`research/synthesis/`** — Conclusiones consolidadas (cuando existan).
-7. **ARCHITECTURE.md** — (Deferred. Crear cuando haya 3+ módulos con contratos.)
+4. **`research/synthesis/papers-cross-mapping.md`** — Síntesis cruzada de los 7 papers vecinos + delta de PIAR explícito.
+5. **`research/synthesis/design-decisions.md`** — 9 decisiones cerradas/inclinadas + 9 controles de medición + preguntas abiertas.
+6. **`code/NOTICE.md`** — Procedencia del codebase vendoreado en `code/` (fork de CharacterRL-iStar, Apache-2.0).
+7. **`.claude/skills/tracking/SKILL.md`** — Workflow operativo de issues + Project v2.
+8. **CHANGELOG.md** — Historial con refs `#N` a issues de GitHub.
+9. **ARCHITECTURE.md** — (Deferred. Crear cuando haya 3+ módulos con contratos.)
 
 ## LA PREGUNTA
 
@@ -31,12 +33,14 @@
 | Vision e invariantes | `PROJECT.md` |
 | Estado HOY del sistema | `CURRENT_STATE.md` |
 | **Decisiones de diseño + trazabilidad** | [`research/synthesis/design-decisions.md`](research/synthesis/design-decisions.md) |
+| **Síntesis cruzada de papers + delta de PIAR** | [`research/synthesis/papers-cross-mapping.md`](research/synthesis/papers-cross-mapping.md) |
+| **Codebase base (fork iStar vendoreado)** | [`code/`](code/) — ver [`code/NOTICE.md`](code/NOTICE.md) para procedencia + licencia |
 | Roadmap / trabajo pendiente | [Project v2 #5](https://github.com/users/lucaspecina/projects/5) · `gh issue list -R lucaspecina/piar-rl` |
 | Workflow de tracking (cómo crear/cerrar issues, sub-issues, etc.) | `.claude/skills/tracking/SKILL.md` + `commands.md` + `reference.md` |
 | Historial de cambios | `CHANGELOG.md` |
-| Trabajo en curso de un paper | Issue activo en GitHub + `research/notes/paper-<slug>.md` |
+| Notas de papers (research notes) | `research/notes/paper-<slug>.md` |
 | Conclusiones consolidadas | `research/synthesis/` |
-| Ejemplos canónicos worked-out | `research/examples/` |
+| Ejemplos canónicos worked-out | `research/examples/` (vacío al 2026-05-11) |
 | Cómo se trabaja acá | Este archivo |
 
 ## Project overview
