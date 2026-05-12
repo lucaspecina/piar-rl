@@ -14,16 +14,20 @@ Apache-2.0) pero no se instaló el environment ni se corrió ningún training. L
   CURRENT_STATE, CLAUDE, CHANGELOG, AUTORESEARCH) y workflow definido.
 - **GitHub Project v2** ["PIAR Roadmap"](https://github.com/users/lucaspecina/projects/5)
   como source of truth del trabajo: campo `Status` (Todo / In Progress / Done).
-- **Sistema de issues + sub-issues nativos** de GitHub. Epic activo: research
-  de papers vecinos.
+- **Sistema de issues + sub-issues nativos** de GitHub. Epic de research (#2)
+  cerrado 2026-05-11. Sin epics activos al 2026-05-12.
 - **Skill `tracking/`** local (`.claude/skills/tracking/`) con SKILL.md,
   commands.md y reference.md (IDs del Project v2 #5).
 - **Skills básicos** del proyecto: `/test` (placeholder hasta que haya código)
   y `/status` (overview del estado del board + commits).
 - **Memoria del proyecto** configurada en `~/.claude/projects/<slug>/memory/`
   con entries de project, user, feedback y reference.
-- **Estructura de research**: `research/{notes,synthesis,examples,archive}/`
-  vacíos pero listos.
+- **Research consolidado**: 7 paper notes en `research/notes/paper-*.md` +
+  síntesis cruzada (`papers-cross-mapping.md`), índice de decisiones
+  (`design-decisions.md`) y deep-dive del vecino α=0 (`piar-delta.md`)
+  en `research/synthesis/`.
+- **Codebase base**: fork de `CharacterRL-iStar` (Apache-2.0) vendoreado
+  en `code/`. Sin modificaciones propias todavía.
 
 ## 2. Cómo usar el sistema hoy
 
@@ -40,8 +44,10 @@ cd piar-rl
 3. Mirar el [Project v2](https://github.com/users/lucaspecina/projects/5) o `gh issue list -R lucaspecina/piar-rl` para ver qué está en `Todo` / `In Progress` / `Done`.
 
 **Para consultar conclusiones de papers ya leídos:**
-- `research/synthesis/` cuando los issues de research empiecen a cerrar.
-- Mientras tanto, los issues activos tienen el progreso en sus comentarios.
+- `research/synthesis/papers-cross-mapping.md` — síntesis multi-paper + delta de PIAR.
+- `research/synthesis/design-decisions.md` — índice de decisiones de diseño (cerradas / inclinadas / abiertas).
+- `research/synthesis/piar-delta.md` — deep-dive del vecino más cercano (π-Distill α=0).
+- `research/notes/paper-*.md` — notas pesadas por paper.
 
 **Para arrancar trabajo nuevo:**
 - Leer `.claude/skills/tracking/SKILL.md` — el workflow operativo.
@@ -49,9 +55,11 @@ cd piar-rl
 
 ## 3. Qué se está construyendo
 
-**Foco actual: cierre de la fase 1 (research consolidado) + reformulación operativa de LA PREGUNTA contra iStar.**
+**Foco actual (2026-05-12): fase 2 — setup de compute Azure ML Y-TEC.** La fase 1 (research) cerró 2026-05-11.
 
-Epic activo: **Research — síntesis de papers vecinos a PIAR** (#2). Estado de sub-issues:
+### Fase 1 — Research (✅ cerrada 2026-05-11)
+
+Epic #2 cerrado. 7 papers vecinos consolidados:
 
 1. ✅ **Yuan 2024 — Implicit PRM** (#3). Notas: [`paper-yuan-implicit-prm.md`](research/notes/paper-yuan-implicit-prm.md).
 2. ✅ **iStar — log-ratio en agentes multi-turn** (#4). Notas: [`paper-istar.md`](research/notes/paper-istar.md) — incluye §15 (versión amigable sin formulas) y §16 (dudas conceptuales). Código liberado, ICLR 2026.
@@ -60,16 +68,26 @@ Epic activo: **Research — síntesis de papers vecinos a PIAR** (#2). Estado de
 5. ✅ **SWEET-RL** (#7). Notas: [`paper-sweet-rl.md`](research/notes/paper-sweet-rl.md).
 6. ✅ **Math-Shepherd** (#8). Notas: [`paper-math-shepherd.md`](research/notes/paper-math-shepherd.md).
 7. ✅ **π-Distill** (#10). Notas: [`paper-pi-distill.md`](research/notes/paper-pi-distill.md).
-8. ⏳ **Síntesis cruzada + delta de PIAR explícito** (#9) — único pendiente, cierre del epic.
+8. ✅ **Síntesis cruzada + delta de PIAR explícito** (#9). Consolidado en [`papers-cross-mapping.md`](research/synthesis/papers-cross-mapping.md). Deep-dive del vecino más cercano (π-Distill α=0) en [`piar-delta.md`](research/synthesis/piar-delta.md) (2026-05-12).
 
-Las 9 decisiones cerradas/inclinadas y 8 controles de medición salieron consolidados en [`research/synthesis/design-decisions.md`](research/synthesis/design-decisions.md).
+Las 9 decisiones cerradas/inclinadas y 9 controles de medición consolidados en [`design-decisions.md`](research/synthesis/design-decisions.md). **Reformulación operativa de LA PREGUNTA contra iStar** anclada en `PROJECT.md`. Stack decidido (#14 cerrado): **fork de `CharacterRL-iStar` vendoreado en `code/`** (Plan B). Plan A (prime-rl + verifiers) descartado.
 
-**Reformulación operativa post-iStar (2026-05-11)**: LA PREGUNTA quedó re-anclada contra el baseline experimental concreto (PIAR vs iStar con setup intacto, cambiando solo cómo se obtiene el término privilegiado del log-ratio). Ver `PROJECT.md` "Reformulación operativa contra iStar". Documentado también en `paper-istar.md` §15-§16 (versión amigable + dudas teóricas reconocidas).
+### Fase 2 — Setup compute (⏳ Now)
 
-**Verificación operacional del repo de iStar (2026-05-11)**: `Tongyi-ConvAI/Qwen-Character/CharacterRL-iStar` es maduro y ejecutable. 7 trainers (iStar, RLOO, GRPO, REINFORCE++, PPO, GiGPO, PRIME) × 2 environments (WebShop, Sokoban). Modelo base Qwen2.5-7B-Instruct, hardware target 8×H100/A100 (compatible con Y-TEC). Framework veRL (fork de Alibaba). Esto reabre Plan B como opción concreta vs Plan A (prime-rl) — decisión pendiente.
+Necesario antes de fase 3 (replicar baseline iStar) y fase 4 (implementar PIAR):
 
-**Todavía NO se está construyendo**: nada de código, nada de environment,
-nada de Azure ML, nada de experimentos. Esas fases arrancan al cerrar #9 + decidir Plan A/B + definir el privileged context concreto para WebShop.
+- Acceso operacional a Azure ML Y-TEC con la VM `lp-gpu-h100-x2-spot` (2×H100 NVL, 188GB VRAM). Spot → checkpointing no negociable.
+- Instalar `code/requirements.txt` (Python 3.12, torch 2.6, vllm 0.8.5, flash-attn 2.7.4) + WebShop env separado (Python 3.10, `code/README.md`).
+- Bajar modelo base Qwen2.5-7B-Instruct.
+
+### Issues abiertos relevantes
+
+- [#13](https://github.com/lucaspecina/piar-rl/issues/13) — **parked** (POC Plan A, congelado al descartar Plan A).
+- [#15](https://github.com/lucaspecina/piar-rl/issues/15) — research: leakage D.1 + D.9 (a ejecutar en fase 5).
+- [#16](https://github.com/lucaspecina/piar-rl/issues/16) — research, **blocked** por setup Azure ML: replicar baseline iStar.
+- [#17](https://github.com/lucaspecina/piar-rl/issues/17) — design: spec estructurada como privileged context para WebShop. Extracción puede empezar sin compute.
+
+**Todavía NO se está construyendo**: nada de environment instalado, nada de training corrido, nada de modificaciones propias sobre `code/`. La barrera bloqueante es Azure ML Y-TEC.
 
 ## 4. Donde mirar para qué
 

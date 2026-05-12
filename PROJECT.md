@@ -99,16 +99,27 @@ Es una **nearest-neighbor replacement study**, NO una "única variable changed" 
      probabilidad que aporta la golden answer a esa acción. Es la única
      interpretación limpia de PIAR. Si los modelos difieren, la resta deja
      de medir solo el efecto del contexto.
-   - **Sub-decisión INCLINADA (2026-05-07):** **frozen al checkpoint inicial**
-     como primer default, después de leer OPSD ([`research/notes/paper-opsd.md`](research/notes/paper-opsd.md) §3, §13.1; ver también
-     [`research/synthesis/design-decisions.md`](research/synthesis/design-decisions.md) C.2). OPSD usa frozen y lo justifica empíricamente
-     ("helps stabilize training and implicitly acts as regularization to
-     prevent excessive deviation from the initial policy"). La alternativa
-     de **co-evolución** (estilo Skill-SD) sigue como ablation legítima dentro
-     del invariante 4 ("mismos pesos / misma arquitectura / sin adapter exclusivo").
-     **Cierre definitivo merece validación empírica en el régimen de PIAR**
-     (multi-turn log-ratio), distinto al de OPSD (single-turn KL). Documentar
-     el resultado de esa validación explícitamente cuando se haga.
+   - **Sub-decisión INCLINADA (actualizada 2026-05-11):** **snapshot del
+     teacher = `π_old`** (la misma snapshot reciente que se usa como
+     denominador del log-ratio en iStar Eq. 1) como **default primario**;
+     **frozen θ₀** (estilo OPSD-Zhao) degradado a **ablation legítima de
+     estabilidad**. Ver [`research/synthesis/design-decisions.md`](research/synthesis/design-decisions.md) C.2 y E.3.
+
+     **Razón del cambio (2026-05-11, post-Codex review):** frozen θ₀ rompe
+     "mismos pesos del student" después del primer update — al step t,
+     θ_0 ≠ θ_t, y el log-ratio mezcla efecto-contexto con weight-drift.
+     Con `π_old` en ambos términos del log-ratio (`log[π_old(a|x,golden) / π_old(a|x)]`),
+     queda **pura diferencia de prompt** como única asimetría — la
+     interpretación limpia que el invariante exige. OPSD-Zhao sigue siendo
+     válido en single-turn KL, pero su transferencia a multi-turn log-ratio
+     no preserva este invariante.
+
+     **Cierre definitivo abierto en E.3:** ablation directo `π_old` vs
+     frozen θ₀ vs re-snapshot cada N steps en fase 5, si hay compute. Si
+     `π_old` se mantiene estable correlacionando con outcome → C.2 cierra
+     sólida. Si decae → re-snapshot. Co-evolución estilo Skill-SD sigue
+     dentro del invariante ("mismos pesos / misma arquitectura / sin adapter
+     exclusivo") como variante legítima.
 5. **Información privilegiada reproducible y verificable.** La golden answer /
    SCM debe ser automatable, loggable y determinística. Si requiere armado
    manual ad-hoc por trayectoria, estamos reintroduciendo step labeling por
@@ -155,10 +166,10 @@ Cuando objetivos compiten, priorizar en este orden:
 |---|---|---|
 | 0 — Bootstrap | ✅ Done | Estructura de docs + tracking + memoria. |
 | 1 — Research | 🟡 Now | Síntesis cruzada de los 7 papers vecinos en `research/synthesis/`. Decisiones consolidadas en [`research/synthesis/design-decisions.md`](research/synthesis/design-decisions.md). |
-| 2 — Setup de compute | ⏳ Next | Stack ya decidido (prime-rl + verifiers, [#11](https://github.com/lucaspecina/piar-rl/issues/11)). Falta setup de Azure ML (Y-TEC) sobre las máquinas con A100/H100. |
-| 3 — Replicación de baseline | ⏳ | Reproducir iStar baseline en WebShop (RLOO + iStar) con los hyperparams del paper. Código liberado ([`Tongyi-ConvAI/Qwen-Character/CharacterRL-iStar`](https://github.com/Tongyi-ConvAI/Qwen-Character/tree/main/CharacterRL-iStar)). |
-| 4 — Implementación PIAR | ⏳ | Modificación quirúrgica sobre la base — estimación 80–250 líneas en Plan A (prime-rl), 30–100 en Plan B (veRL fork iStar) si se reabre. |
-| 5 — Comparación + ablations | ⏳ | PIAR vs baseline + ablations clave: leakage vs progreso causal (D.1), forma del privileged context (C.5, E.2), frozen vs co-evolución (E.3), β scaling, length norm. |
+| 2 — Setup de compute | ⏳ Next | Stack decidido 2026-05-11 ([#14](https://github.com/lucaspecina/piar-rl/issues/14) cerrado): fork de `CharacterRL-iStar` vendoreado en [`code/`](code/). Plan A (prime-rl + verifiers, [#11](https://github.com/lucaspecina/piar-rl/issues/11)) descartado en favor del fork directo. Falta setup de Azure ML (Y-TEC) sobre máquinas con 8×H100/A100. |
+| 3 — Replicación de baseline | ⏳ | Reproducir iStar baseline en WebShop (RLOO + iStar) con los hyperparams del paper, usando `code/` ([#16](https://github.com/lucaspecina/piar-rl/issues/16)). |
+| 4 — Implementación PIAR | ⏳ | Modificación quirúrgica sobre `code/` (fork veRL iStar) — estimación 30–100 líneas. |
+| 5 — Comparación + ablations | ⏳ | PIAR vs baseline + ablations clave: leakage textual + existencial (D.1 + D.9), forma del privileged context (C.5, E.2), `π_old` vs frozen θ₀ (E.3, post-2026-05-11), β scaling, length norm. |
 | 6 — 2do benchmark + redacción | ⏳ | Extensión a ALFWorld/SOTOPIA + draft de paper. |
 | 7 — Caso de estudio SREG (opcional) | ⏳ | SCM como información privilegiada — la cereza, no el plato principal. |
 
