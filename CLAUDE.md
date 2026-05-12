@@ -143,10 +143,12 @@ Workflow operativo completo en `.claude/skills/tracking/`:
 
 | # | Epic | Status | Sub-issues | Notas |
 |---|------|--------|------------|-------|
-| [#2](https://github.com/lucaspecina/piar-rl/issues/2) | Research — síntesis de papers vecinos | Todo | #3, #4, #5, #6, #7, #8, #9, #10 | Yuan, iStar, OPSD, PRIME, SWEET-RL, Math-Shepherd, π-Distill (#10) y síntesis cruzada. |
+| ~~[#2](https://github.com/lucaspecina/piar-rl/issues/2)~~ | ~~Research — síntesis de papers vecinos~~ | ✅ Done (2026-05-11) | #3, #4, #5, #6, #7, #8, #9, #10 todos cerrados | Cierre del epic: ver `research/synthesis/papers-cross-mapping.md` + `design-decisions.md`. |
 
 > Esta tabla se mantiene sincronizada con el Project v2. Si se crea/cierra un
 > epic o cambia el criterio: actualizar acá en el mismo commit.
+>
+> **Estado al 2026-05-11**: sin epics activos. Próximo posible epic = "Fase 4 — Implementar PIAR sobre Plan B" cuando arranque la implementación.
 
 ## Commit workflow — MANDATORIO
 
