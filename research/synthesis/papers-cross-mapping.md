@@ -292,14 +292,21 @@ operativa contra iStar"):
 Correcciones post-verificación de los papers (2026-06-12), donde la nota
 difiere de la tabla original del pivot doc:
 
-1. **HCAPO** resultó ser un **ratio mecánico de logprobs same-model
-   dos-contextos** (ρ = π_hind/π, clipped, canal multiplicativo sobre el
-   return), no un juez generativo que "razona y opina". Está estructuralmente
-   más cerca del forward de PIAR de lo que la familia sugiere; las
-   diferencias reales son: PI = outcome auto-generado en hindsight (no golden
-   fáctica del dataset), canal multiplicativo (no aditivo al advantage), y
-   sin dual/residual. Reporta ALFWorld 91.4 / WebShop 73.8 con
-   Qwen2.5-7B — entra a la lista de números a batir junto a GiGPO. Ver
+1. **HCAPO** no es un juez generativo que "razona y opina": computa
+   **logprobs mecánicos del mismo modelo bajo contexto de hindsight**
+   (verificado dos veces, 2026-06-12 — la segunda lectura a pedido de review
+   externo corrigió además la primera: la implementación real, Eq. 7, usa
+   **un solo contexto** normalizado contra la media intra-trayectoria, no el
+   ratio dos-contextos de su forma teórica Eq. 5). Es el **vecino mecánico
+   #1 del forward** — por encima de TAMTRL en prioridad de related work —
+   pero el delta de PIAR es nítido: PI fáctica del dataset vs outcome
+   auto-generado en hindsight; contraste explícito con/sin-PI vs score de un
+   contexto; aditivo en advantage vs multiplicativo en return; dual+residual
+   vs nada epistémico. Sus números: ALFWorld 91.4±2.3 / WebShop 73.8±2.8 con
+   Qwen2.5-7B — pero **vs GiGPO la ganancia es +0.6 con barras solapadas**
+   (el +13.8 es vs GRPO vanilla), el split seen/unseen no está desambiguado,
+   y es preprint sin código. ALFWorld >90% en esa config → alerta de
+   saturación (N.13). Ver
    [`paper-menores-pivot-2026-06.md`](../notes/paper-menores-pivot-2026-06.md) §1.
 2. **TAMTRL** además gatea el reward multiplicativamente por el outcome
    binario (trayectorias fallidas reciben 0 en todos los turnos) — quinta

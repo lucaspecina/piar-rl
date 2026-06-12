@@ -18,56 +18,84 @@
 
 ### Mecanismo
 
-El propio LLM del agente, **congelado y prompteado** (sin entrenamiento del
-crítico), actúa como crítico post-hoc. El truco: inyectan el **outcome exitoso
-realizado** `s_final` directamente al contexto del modelo ("we simulate the
-hindsight distribution by injecting the successful outcome s_final directly
-into the model's prompt") y leen **logprobs token-level** de la acción:
+> ⚠️ **Enmendado 2026-06-12 tras verificación independiente** (segunda lectura
+> a pedido de review externo). La primera versión de esta sección describía a
+> HCAPO como "importance ratio same-model dos-contextos" — eso es la **forma
+> teórica (Eq. 5, derivada de HCA, Harutyunyan et al. 2019)**, no lo que el
+> paper implementa.
+
+El propio LLM del agente, prompteado (sin entrenamiento de un crítico
+separado; ⚠️ el paper usa la notación `π_θ` y **no afirma explícitamente que
+esté congelado** — podría ser la política viva re-scoreando), actúa como
+crítico post-hoc. Inyectan el **outcome realizado** `s_final` (auto-generado
+por el propio rollout) al contexto y leen **logprobs token-level** de la
+acción:
 
     π_hind(a_t) = exp( 1/(T·|a_t|) · Σ_j log π_θ(y_j | y_<j, s_t, s_final) )
 
-con sharpening T = 5.0. Eso define un **importance ratio same-model
-dos-contextos**:
+**Lo que implementan (Eq. 7) tiene UN solo contexto**: el denominador no es
+π(a_t | s_t) sino la **media empírica intra-trayectoria** de los propios
+scores de hindsight —
 
-    ρ_t = π_hind(a_t | s_t, s_final) / π(a_t | s_t),   clipped a [0.8, 1.2]
+    ρ_t = clip( π_hind(a_t) / π̄_hind , 0.8, 1.2 ),   π̄_hind = (1/T) Σ_k π_hind(a_k)
 
-que refina el return: `Q^H_t = ρ_t · G_t`. El advantage final es multi-escala:
-término macro GRPO (grupo de 8 rollouts) + `ω·` término micro de hindsight
-normalizado (ω = 1.0), dentro de PPO clipped con β_KL = 0.01.
+("Since this marginalization is intractable, we approximate it using the
+empirical mean of hindsight scores within a trajectory"). La señal es
+**necesidad relativa de cada acción dentro de la trayectoria bajo contexto de
+hindsight**, no un delta de información entre contexto-con-PI y
+contexto-sin-PI. Refina el return: `Q^H_t = ρ_t · G_t`; advantage multi-escala
+(macro GRPO de 8 rollouts + `ω·` término micro normalizado), PPO clipped con
+KL. Aplican una máscara **"do-no-harm"** que anula señales de hindsight
+negativas en trayectorias exitosas. ⚠️ No verificados en la segunda lectura:
+T = 5.0, ω = 1.0 final, β_KL = 0.01, α = 0.5 del smoothing, overhead +8.3%,
+Search-QA 48.3 (afirmados en la primera; no contradichos).
 
 ### Números
 
-Qwen2.5-7B-Instruct. ALFWorld 91.4% vs GRPO 77.6% (+13.8; 96.9% con smoothing
-temporal α = 0.5), WebShop 73.8% vs 66.1% (+7.7), Search-QA 48.3 vs GiGPO 47.2.
-Baselines: GRPO, RLOO, EMPG, GiGPO, PPO. Overhead reportado: +8.3% de training
-time.
+Qwen2.5-7B-Instruct. ALFWorld **91.4±2.3** — pero el headline +13.8 es **solo
+vs GRPO vanilla** (77.6±5.2); **vs GiGPO (90.8±1.3 en la propia tabla de
+HCAPO) la ganancia es +0.6 con barras de error solapadas**. WebShop SR
+73.8±2.8 vs GRPO 66.1±3.7 (vs GiGPO 72.8±3.2 — ídem, margen chico). 96.9% con
+smoothing temporal. ⚠️ El paper **no desambigua el split seen/unseen de
+ALFWorld** (delega el protocolo a GiGPO, que tampoco lo explicita en el HTML)
+y la config está **cerca de saturación** (>90%) — alerta para nuestro uso de
+ALFWorld como benchmark del backward (¿hace falta un tercer environment con
+info oculta de verdad? → N.13). Status: **preprint v1 (marzo 2026, template
+ICML), sin statement de aceptación y sin código público encontrado**.
 
 ### Contraste con PIAR
 
-⚠️ **Discrepancia con la tabla §2 del pivot**: el pivot lo clasifica en la
-familia "juez prompteado / hindsight generativo" ("LLM congelado *razona*
-post-hoc y *emite scores*"). Lo verificado en el HTML es que HCAPO **no emite
-scores opinados por generación**: computa un **ratio mecánico de
-probabilidades del mismo modelo bajo dos contextos** — estructuralmente mucho
-más cerca del forward de PIAR de lo que la tabla sugiere. Es congelado y
-prompteado, sí, pero el canal es logprob, no juicio generativo. Para related
-work hay que tratarlo como el más cercano mecánicamente de estos 4 vecinos.
+⚠️ **Doble corrección acumulada**: (1) contra la tabla §2 del pivot — HCAPO
+**no es juez generativo**: no emite scores opinados por generación, el canal
+es logprob mecánico. (2) Contra la primera versión de esta nota — **tampoco
+es un ratio dos-contextos**: solo computa logprobs bajo el contexto de
+hindsight y se auto-normaliza intra-trayectoria (Eq. 7). La caracterización
+justa para related work: *"scoring de necesidad bajo contexto de hindsight,
+normalizado intra-trayectoria, motivado teóricamente por el ratio HCA"*.
+Sigue siendo el vecino mecánicamente más cercano de estos 4, pero el delta
+de PIAR es mayor de lo que la primera lectura sugería.
 
 Diferencias reales que lo separan del forward (y del método post-pivot):
 
-1. **Qué es la PI**: el outcome exitoso *auto-generado por el propio rollout*
+1. **Qué es la PI**: el outcome realizado *auto-generado por el propio rollout*
    (hindsight puro), no información privilegiada fáctica del dataset/simulador
    (golden estructurada en componentes g_i). HCAPO no usa PI externa.
-2. **Canal**: multiplicativo (importance correction sobre el return) vs aditivo
-   (step reward dentro del advantage).
-3. **Hindsight bias por diseño**: premia acciones correlacionadas con el éxito
+2. **Qué se computa**: score de un solo contexto normalizado contra la media
+   de la trayectoria, vs **contraste explícito de dos contextos** (con-PI /
+   sin-PI) — el objeto que define al forward de PIAR. HCAPO nunca computa el
+   delta de información.
+3. **Canal**: multiplicativo (corrección del return, clipped [0.8, 1.2]) vs
+   aditivo (step reward dentro del advantage).
+4. **Hindsight bias por diseño**: premia acciones correlacionadas con el éxito
    ya realizado — exactamente el sesgo que el pivot §4.3 identifica como lo que
    el forward NO arregla y el backward compensa. HCAPO no tiene componente
    epistémico ni dosificación: ni backward, ni residual, ni mapa por
-   environment.
-4. **Solapamiento de benchmarks**: usa WebShop y ALFWorld con Qwen2.5-7B —
-   nuestros mismos targets. Sus números (y su comparación con GiGPO) sirven de
-   referencia de magnitudes esperables para los brazos A1/A3.
+   environment. La máscara do-no-harm restringe además el refinamiento a
+   trayectorias exitosas (⚠️ tratamiento de fallidas no claro) — pariente del
+   gating por outcome de TAMTRL: redistribuye crédito dentro del éxito.
+5. **Solapamiento de benchmarks**: usa WebShop y ALFWorld con Qwen2.5-7B —
+   nuestros mismos targets. Referencia de magnitudes para A1/A3, con el caveat
+   de saturación de arriba.
 
 ---
 
@@ -245,13 +273,16 @@ Releyendo la tabla §2 y el veredicto §3 del pivot doc contra lo verificado:
    dual, la PI residual gateada por belief, ni el mapa por environment. El
    cuadrante "PI fáctica → canal reward → dual → dosificada" sigue vacío
    tanto en el survey de CA como en el survey de OPD.
-2. **Una corrección a la tabla §2**: HCAPO no es "juez generativo/opinado" —
-   es un ratio mecánico same-model dos-contextos (con outcome realizado como
-   contexto, canal multiplicativo). Eso lo convierte en el vecino
-   mecánicamente más cercano de estos 4 y sube su prioridad en related work:
-   diferenciar por (i) PI fáctica del dataset vs outcome auto-generado en
-   hindsight, (ii) aditivo en advantage vs multiplicativo en return,
-   (iii) dual + residual vs forward-hindsight puro.
+2. **Una corrección a la tabla §2** (enmendada 2026-06-12 tras verificación
+   independiente): HCAPO no es "juez generativo/opinado" — es scoring
+   mecánico de logprobs same-model bajo contexto de hindsight, **normalizado
+   intra-trayectoria (un solo contexto, Eq. 7)**, no un ratio dos-contextos
+   (eso es solo su forma teórica Eq. 5). Sigue siendo el vecino mecánicamente
+   más cercano de estos 4 y el primero a diferenciar en related work:
+   (i) PI fáctica del dataset vs outcome auto-generado en hindsight,
+   (ii) contraste explícito con-PI/sin-PI vs score de un contexto normalizado
+   contra la media de la trayectoria, (iii) aditivo en advantage vs
+   multiplicativo en return, (iv) dual + residual vs forward-hindsight puro.
 3. **El backward corre contra reloj**: IG semántico refina a IGPO en ~4 meses
    y con garantías teóricas equivalentes a las nuestras (telescoping incluido)
    — pero sigue en retrieval/QA. La ventana en ejecución multi-turn está
@@ -268,11 +299,16 @@ Releyendo la tabla §2 y el veredicto §3 del pivot doc contra lo verificado:
 
 ## Lo más importante para retener
 
-1. **HCAPO está mal clasificado en la tabla §2 del pivot**: es log-ratio
-   mecánico same-model (outcome-conditioned), no juez generativo. Es el
-   vecino más peligroso de los 4 en review y el primero a diferenciar:
-   hindsight auto-generado + multiplicativo + sin backward/residual. Además
-   comparte nuestros benchmarks exactos (WebShop/ALFWorld, Qwen2.5-7B).
+1. **HCAPO, caracterización final post-verificación**: scoring mecánico de
+   logprobs same-model bajo contexto de hindsight, normalizado
+   intra-trayectoria — ni juez generativo (error del pivot doc) ni ratio
+   dos-contextos (error de la primera versión de esta nota). Es el vecino
+   más peligroso de los 4 en review y el primero a diferenciar: hindsight
+   auto-generado + un-solo-contexto + multiplicativo + sin backward/residual.
+   Comparte nuestros benchmarks exactos (WebShop/ALFWorld, Qwen2.5-7B), pero
+   su ganancia real vs GiGPO es +0.6 con barras solapadas, ALFWorld está
+   cerca de saturación en esa config, y es preprint sin código — verificar
+   números propios antes de citarlos como referencia dura.
 2. **El nicho del backward se mueve en ciclos de ~4 meses** (IGPO → IG
    semántico), pero sigue encerrado en retrieval/QA. ALFWorld/ejecución sigue
    libre. Velocidad > perfección.
