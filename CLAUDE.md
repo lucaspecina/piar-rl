@@ -30,7 +30,8 @@
 
 | Necesito... | Ir a... |
 |---|---|
-| Vision e invariantes | `PROJECT.md` |
+| **Pivot 2026-06 (fuente de verdad del re-centrado)** | [`research/synthesis/pivot-2026-06.md`](research/synthesis/pivot-2026-06.md) — manda sobre los docs que reflejan el estado pre-pivot hasta que se propague todo |
+| Vision e invariantes | `PROJECT.md` (⚠️ LA PREGUNTA e invariantes pre-pivot; propuesta de actualización en [`research/synthesis/proposal-project-md.md`](research/synthesis/proposal-project-md.md), pendiente aprobación — #22) |
 | Estado HOY del sistema | `CURRENT_STATE.md` |
 | **Decisiones de diseño + trazabilidad** | [`research/synthesis/design-decisions.md`](research/synthesis/design-decisions.md) |
 | **Síntesis cruzada de papers + delta de PIAR** | [`research/synthesis/papers-cross-mapping.md`](research/synthesis/papers-cross-mapping.md) |
@@ -152,12 +153,11 @@ Workflow operativo completo en `.claude/skills/tracking/`:
 
 | # | Epic | Status | Sub-issues | Notas |
 |---|------|--------|------------|-------|
+| [#19](https://github.com/lucaspecina/piar-rl/issues/19) | Pivot 2026-06 — reward bidireccional + PI residual | 🟡 In Progress | #20 ✅, #21 ✅, #22 (blocked por aprobación de Lucas), #23 | Fuente de verdad: [`research/synthesis/pivot-2026-06.md`](research/synthesis/pivot-2026-06.md). |
 | ~~[#2](https://github.com/lucaspecina/piar-rl/issues/2)~~ | ~~Research — síntesis de papers vecinos~~ | ✅ Done (2026-05-11) | #3, #4, #5, #6, #7, #8, #9, #10 todos cerrados | Cierre del epic: ver `research/synthesis/papers-cross-mapping.md` + `design-decisions.md`. |
 
 > Esta tabla se mantiene sincronizada con el Project v2. Si se crea/cierra un
 > epic o cambia el criterio: actualizar acá en el mismo commit.
->
-> **Estado al 2026-05-11**: sin epics activos. Próximo posible epic = "Fase 4 — Implementar PIAR sobre Plan B" cuando arranque la implementación.
 
 ## Commit workflow — MANDATORIO
 
