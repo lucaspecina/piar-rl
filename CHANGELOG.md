@@ -17,6 +17,9 @@ que la motivó (formato `#N`).
   - #15 (leakage D.1+D.9, ahora bidireccional) y #16 (replicar baseline iStar, sigue `blocked` por Azure ML) se mantienen. #13 (cerrado `not planned` el 2026-05-11) removido del board (cleanup pendiente del skill de tracking; el pivot doc lo daba como "parked" — info stale).
 - **`CLAUDE.md`**: tabla "Epics activos" con #19; navegación con fila del pivot doc y warning sobre PROJECT.md pre-pivot.
 - **Propuesta de PROJECT.md** (LA PREGUNTA nueva del pivot §5, invariantes 10/11, ediciones a Misión / "Lo que NO es", roadmap con ALFWorld a primera clase y Figura 1 como gate de fase 4) escrita en formato antes/después en [`research/synthesis/proposal-project-md.md`](research/synthesis/proposal-project-md.md) — **NO aplicada**; espera aprobación explícita de Lucas ([#22](https://github.com/lucaspecina/piar-rl/issues/22)).
+- **Avance [#17](https://github.com/lucaspecina/piar-rl/issues/17) (In Progress)**: diseño de componentes cerrado en [`research/synthesis/pi-webshop.md`](research/synthesis/pi-webshop.md) — g_i verbatim del goal dict (`goal.py:48-58`), wrappers por tipo, belief 1/L, serialización del residual, exclusiones. Pendiente: validación contra dataset real (descarga bloqueada, sin Python en esta máquina).
+- **Draft pre-registro Figura 1 [#23](https://github.com/lucaspecina/piar-rl/issues/23) (In Progress)**: [`research/synthesis/figura1-prereg.md`](research/synthesis/figura1-prereg.md) con P1–P4, árbol de decisión y placeholders `[LUCAS]` (ρ de P3, criterio de colapso de P4, τ, test/α).
+- **NO se pusheó la branch `pivot-2026-06`**: la decisión de visibilidad del repo (pivot §10.5, scoop) está pendiente de Lucas — pushear publica el método.
 
 ## 2026-05-12
 
