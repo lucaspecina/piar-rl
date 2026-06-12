@@ -1,9 +1,13 @@
 # Pre-registro — Figura 1 (go/no-go del método dual, sin RL)
 
-> **DRAFT para review de Lucas — [#23](https://github.com/lucaspecina/piar-rl/issues/23).**
-> Los umbrales marcados `[LUCAS]` los fija él; el resto queda congelado al
-> mergear este doc. Una vez corrido el experimento, este doc NO se edita:
-> los desvíos se reportan contra esta versión (ese es el punto del pre-registro).
+> **CONGELADO 2026-06-12 — [#23](https://github.com/lucaspecina/piar-rl/issues/23) cerrado.**
+> Umbrales fijados con los defaults del review externo (2026-06-12), bajo
+> delegación explícita de Lucas ("son defaults razonables... ajustalos a tu
+> gusto, pero fijalos antes de mirar un solo rollout" + aprobación general).
+> Cualquier cambio requiere editar este doc **antes de generar el primer
+> rollout**, en commit propio y explícito. Una vez corrido el experimento,
+> este doc NO se edita: los desvíos se reportan contra esta versión (ese es
+> el punto del pre-registro).
 >
 > **Refs:** pivot §8 (predicciones), §4 (formalización de los scores),
 > [`pi-webshop.md`](pi-webshop.md) (componentes g_i y wrappers — dependencia
@@ -38,8 +42,7 @@ Las tres lecturas a computar por turno sobre cada trayectoria congelada:
 3. **r_fwd residual** (pivot §4.3 con gating τ): para la lectura del canal.
    **τ = percentil empírico por tipo de componente** (no umbral universal —
    mitiga el mass-splitting de [`pi-webshop.md`](pi-webshop.md) §4.1),
-   **condicionado a que P5 pase**; percentil default p50 `[LUCAS: confirmar
-   regla percentil-por-tipo y el percentil]`.
+   **condicionado a que P5 pase**; percentil fijado: **p50 por tipo**.
 
 ## 3. Clasificación de acciones
 
@@ -70,20 +73,20 @@ separarse por construcción del span y no por semántica. Las
 semántica); las between-type quedan como **descriptivas** (se reportan, no
 gatean).
 
-### 4.1 Confirmatorias (gatean; Mann-Whitney, α = 0.05 con Bonferroni sobre {P1', P2', P3} `[LUCAS: confirmar]`)
+### 4.1 Confirmatorias (gatean; Mann-Whitney, α = 0.05 con Bonferroni sobre {P1', P2', P3})
 
 | # | Predicción | Criterio cuantitativo | Qué valida |
 |---|---|---|---|
 | P1' | El forward distingue semántica dentro del mismo formato | mediana r_fwd(click sobre el producto target, ASIN del goal) > mediana r_fwd(click sobre otro producto); ídem opciones: r_fwd(click de opción ∈ goal_options) > r_fwd(click de opción ∉) | El forward mide corrección de la decisión, no longitud/sintaxis del span |
 | P2' | El backward premia las acciones que revelan información | mediana r_bwd(acciones cuya observación resultante contiene la forma canónica de algún g_i todavía no aparecido) > mediana r_bwd(acciones cuya observación no agrega ningún g_i) — clasificación determinística por matching textual sobre la observación, regla escrita antes de mirar datos | La direccionalidad epistémica existe a igualdad de sintaxis |
-| P3 | El belief amortizado trackea valor | **Spearman parcial** (Σ_t r_bwd vs score continuo final, **controlando longitud de trayectoria**) ρ > 0.3 `[LUCAS: confirmar 0.3]`. **Robustness obligatoria**: la correlación **excluyendo el último turno** mantiene signo y significancia (anti-circularidad: si compraste el item correcto, la página final lo contenía y el belief final es alto por definición) | b_i no es ruido; el gating tiene base (N.9 parcial) |
-| P5 | El belief separa lo sabido de lo no sabido | Para cada tipo de componente: AUC > 0.8 `[LUCAS: confirmar]` separando b_i de componentes **ya aparecidos verbatim (forma canónica) en observaciones del episodio** vs no aparecidos | La premisa del gating. Si falla, el gating por belief se rediseña ANTES de gastar GPU (fallback: gating observacional, `pi-webshop.md` §4.2) |
+| P3 | El belief amortizado trackea valor | **Spearman parcial** (Σ_t r_bwd vs score continuo final, **controlando longitud de trayectoria**) **ρ > 0.3**. **Robustness obligatoria**: la correlación **excluyendo el último turno** mantiene signo y significancia (anti-circularidad: si compraste el item correcto, la página final lo contenía y el belief final es alto por definición) | b_i no es ruido; el gating tiene base (N.9 parcial) |
+| P5 | El belief separa lo sabido de lo no sabido | Para cada tipo de componente: **AUC > 0.8** separando b_i de componentes **ya aparecidos verbatim (forma canónica) en observaciones del episodio** vs no aparecidos | La premisa del gating. Si falla, el gating por belief se rediseña ANTES de gastar GPU (fallback: gating observacional, `pi-webshop.md` §4.2) |
 
 ### 4.2 Control existencial
 
 | # | Predicción | Criterio | Qué valida |
 |---|---|---|---|
-| P4 | Nada de esto es leakage textual | Con shuffled-golden (g de otro episodio, mismo formato): para cada confirmatoria, el **efecto shuffled es < 1/3 del efecto real Y no significativo** `[LUCAS: confirmar criterio]` | D.9 aplicado a ambas direcciones |
+| P4 | Nada de esto es leakage textual | Con shuffled-golden (g de otro episodio, mismo formato): para cada confirmatoria, el **efecto shuffled es < 1/3 del efecto real Y no significativo (α = 0.05)** | D.9 aplicado a ambas direcciones |
 
 ### 4.3 Descriptivas y exploratorias (se reportan, no gatean)
 

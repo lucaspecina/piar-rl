@@ -86,9 +86,9 @@ Hecho al 2026-06-12 (epic "Pivot 2026-06" en el board):
 
 1. ✅ **Vecinos nuevos consolidados** (6 notas): [`paper-igpo.md`](research/notes/paper-igpo.md), [`paper-tamtrl.md`](research/notes/paper-tamtrl.md), [`paper-survey-ca.md`](research/notes/paper-survey-ca.md), [`paper-gigpo.md`](research/notes/paper-gigpo.md), [`paper-knowrl.md`](research/notes/paper-knowrl.md), [`paper-menores-pivot-2026-06.md`](research/notes/paper-menores-pivot-2026-06.md).
 2. ✅ **Síntesis actualizada**: sección "Pivot 2026-06" en [`papers-cross-mapping.md`](research/synthesis/papers-cross-mapping.md) (mapa + veredicto de novedad) y decisiones N.1–N.12 en [`design-decisions.md`](research/synthesis/design-decisions.md).
-3. ⏳ **Pendiente de aprobación de Lucas**: reemplazo de LA PREGUNTA, invariantes 10/11 y roadmap en `PROJECT.md` — propuesta completa en [`proposal-project-md.md`](research/synthesis/proposal-project-md.md).
+3. ✅ **PROJECT.md actualizado post-pivot** (aprobado por Lucas y aplicado 2026-06-12, commit `acb799f`): LA PREGUNTA dual+residual, invariantes 10/11, roadmap con Figura 1 como gate. Registro del cambio en [`proposal-project-md.md`](research/synthesis/proposal-project-md.md). (#22 cerrado)
 4. 🟡 **#17 en curso**: componentes g_i + wrappers + formato canónico definidos en [`pi-webshop.md`](research/synthesis/pi-webshop.md); falta la validación contra el dataset real (descarga bloqueada — requiere Python/VM).
-5. 🟡 **Pre-registro de Figura 1 (#23)**: draft completo en [`figura1-prereg.md`](research/synthesis/figura1-prereg.md) con placeholders `[LUCAS]` para los umbrales (ρ de P3, criterio de colapso de P4, regla de τ). Es el experimento día-1 de compute y el gate go/no-go de la implementación.
+5. ✅ **Pre-registro de Figura 1 congelado** ([`figura1-prereg.md`](research/synthesis/figura1-prereg.md), #23 cerrado): umbrales fijados 2026-06-12 con los defaults del review externo, bajo delegación explícita de Lucas. Es el experimento día-1 de compute y el gate go/no-go de la implementación.
 
 La fase 1 original (7 vecinos: Yuan, iStar, OPSD, PRIME, SWEET-RL,
 Math-Shepherd, π-Distill — epic #2) cerró 2026-05-11; sus notas y

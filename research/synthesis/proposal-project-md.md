@@ -1,9 +1,9 @@
 # Propuesta de edición de PROJECT.md — pivot 2026-06
 
-> **Qué es esto:** la propuesta completa de los cambios a `PROJECT.md` que el
-> pivot 2026-06 requiere y que **necesitan aprobación explícita de Lucas**
-> ([`pivot-2026-06.md`](pivot-2026-06.md) §11, bloque "requiere aprobación").
-> **NO está aplicada** — PROJECT.md sigue reflejando el estado pre-pivot.
+> ✅ **APLICADA (2026-06-12, commit `acb799f`)** tras aprobación de Lucas.
+> Este doc queda como registro del cambio (antes/después); la fuente viva es
+> [`PROJECT.md`](../../PROJECT.md). Cerrado en
+> [#22](https://github.com/lucaspecina/piar-rl/issues/22).
 >
 > **v2 (2026-06-12):** incorpora el review externo — cierres de los loopholes
 > de los invariantes 10/11 (trayectoria-experta-como-hecho, selección como

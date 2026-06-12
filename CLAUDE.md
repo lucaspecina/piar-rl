@@ -14,24 +14,29 @@
 
 ## LA PREGUNTA
 
-> **¿Podemos darle señal densa por acción a un agente RL multi-turn sin entrenar
-> reward model ni etiquetar steps, usando solo el log-ratio entre un teacher con
-> información privilegiada (golden answer / SCM) y el student — y si funciona,
-> dónde y por qué?**
+> **¿Puede un agente RL multi-turn recibir señal densa por acción derivada
+> solo de información privilegiada fáctica y del propio modelo — combinando
+> el incremento de probabilidad de la acción bajo PI (valor pragmático) con
+> el incremento de probabilidad de la PI tras la acción (valor epistémico),
+> dosificando qué PI ve el scorer según el belief medido del student — y en
+> qué entornos hace falta cada componente y por qué?**
 >
 > Aplicala al evaluar, diseñar, priorizar o revisar cualquier decisión.
 
-> **Reformulación operativa contra iStar (2026-05-11):** versión concreta del
-> experimento primario en [`PROJECT.md`](PROJECT.md). Aísla "fuente de la
-> asimetría" (pesos del juez entrenado en iStar vs golden en el prompt en PIAR)
-> como única variable. Ver también [`research/notes/paper-istar.md`](research/notes/paper-istar.md) §15-§16 para la explicación amigable y las dudas teóricas.
+> **Reformulación operativa contra los baselines (2026-06-12):** ¿el reward
+> dual (±residual) supera a outcome-only, a cada dirección sola, a iStar y a
+> GiGPO — en WebShop y ALFWorld, con leakage controls bidireccionales? Detalle
+> en [`PROJECT.md`](PROJECT.md). Formalización del método:
+> [`research/synthesis/pivot-2026-06.md`](research/synthesis/pivot-2026-06.md) §4.
 
 ## Where to find what
 
 | Necesito... | Ir a... |
 |---|---|
-| **Pivot 2026-06 (fuente de verdad del re-centrado)** | [`research/synthesis/pivot-2026-06.md`](research/synthesis/pivot-2026-06.md) — manda sobre los docs que reflejan el estado pre-pivot hasta que se propague todo |
-| Vision e invariantes | `PROJECT.md` (⚠️ LA PREGUNTA e invariantes pre-pivot; propuesta de actualización en [`research/synthesis/proposal-project-md.md`](research/synthesis/proposal-project-md.md), pendiente aprobación — #22) |
+| **Pivot 2026-06 (formalización del método: §4; brazos: §9)** | [`research/synthesis/pivot-2026-06.md`](research/synthesis/pivot-2026-06.md) — ya propagado a PROJECT.md (2026-06-12) |
+| Vision e invariantes (post-pivot, 11 invariantes) | `PROJECT.md` |
+| **Componentes g_i de WebShop + wrappers** | [`research/synthesis/pi-webshop.md`](research/synthesis/pi-webshop.md) (#17) |
+| **Pre-registro Figura 1 (gate go/no-go)** | [`research/synthesis/figura1-prereg.md`](research/synthesis/figura1-prereg.md) (#23) |
 | Estado HOY del sistema | `CURRENT_STATE.md` |
 | **Decisiones de diseño + trazabilidad** | [`research/synthesis/design-decisions.md`](research/synthesis/design-decisions.md) |
 | **Síntesis cruzada de papers + delta de PIAR** | [`research/synthesis/papers-cross-mapping.md`](research/synthesis/papers-cross-mapping.md) |
@@ -48,11 +53,15 @@
 
 ## Project overview
 
-Research project sobre RL para LLM agents. Propone usar el log-ratio de logprobs
-entre un teacher con golden answer en contexto (privileged-context) y el student
-sin ella, sumado sobre el span de cada acción ReAct, como step reward. Cruza tres
-líneas existentes: implicit PRM (Yuan), privileged-context teacher (OPSD) y
-agentic multi-turn RL (iStar). Fase actual: **research/papers, sin código**.
+Research project sobre RL para LLM agents. Post-pivot 2026-06: propone un
+**step reward bidireccional** derivado solo de información privilegiada
+fáctica y del propio modelo — forward pragmático (Δ logprob de la acción con
+PI en el prompt del scorer) + backward epistémico (Δ belief sobre los
+componentes de la PI) — con **PI residual** gateada por el belief medido del
+student (auto-annealing sin schedule). El claim es la descomposición, la
+dosificación y el mapa dónde/por qué (los componentes sueltos ya están
+publicados: TAMTRL/IGPO). Baselines: iStar y GiGPO. Fase actual:
+**research/pre-registro, sin código propio corrido**.
 
 ## Environment setup
 
