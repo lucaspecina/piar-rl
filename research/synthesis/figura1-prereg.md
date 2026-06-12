@@ -80,7 +80,7 @@ gatean).
 | P1' | El forward distingue semántica dentro del mismo formato | mediana r_fwd(click sobre el producto target, ASIN del goal) > mediana r_fwd(click sobre otro producto); ídem opciones: r_fwd(click de opción ∈ goal_options) > r_fwd(click de opción ∉) | El forward mide corrección de la decisión, no longitud/sintaxis del span |
 | P2' | El backward premia las acciones que revelan información | mediana r_bwd(acciones cuya observación resultante contiene la forma canónica de algún g_i todavía no aparecido) > mediana r_bwd(acciones cuya observación no agrega ningún g_i) — clasificación determinística por matching textual sobre la observación, regla escrita antes de mirar datos | La direccionalidad epistémica existe a igualdad de sintaxis |
 | P3 | El belief amortizado trackea valor | **Spearman parcial** (Σ_t r_bwd vs score continuo final, **controlando longitud de trayectoria**) **ρ > 0.3**. **Robustness obligatoria**: la correlación **excluyendo el último turno** mantiene signo y significancia (anti-circularidad: si compraste el item correcto, la página final lo contenía y el belief final es alto por definición) | b_i no es ruido; el gating tiene base (N.9 parcial) |
-| P5 | El belief separa lo sabido de lo no sabido | Para cada tipo de componente: **AUC > 0.8** separando b_i de componentes **ya aparecidos verbatim (forma canónica) en observaciones del episodio** vs no aparecidos | La premisa del gating. Si falla, el gating por belief se rediseña ANTES de gastar GPU (fallback: gating observacional, `pi-webshop.md` §4.2) |
+| P5 | El belief separa lo sabido de lo no sabido | Para cada tipo de componente: **AUC > 0.8** separando b_i de componentes **ya aparecidos verbatim (forma canónica) en observaciones del episodio** vs no aparecidos. **Se corre para las dos variantes de inyección del wrapper** (assistant-prefill y user-message, `pi-webshop.md` §4); el gate pasa si **al menos una** supera el umbral, y esa variante queda fijada para training (regla de selección pre-registrada — agregada 2026-06-12 en commit propio, antes de cualquier rollout) | La premisa del gating. Si falla en ambas variantes, el gating por belief se rediseña ANTES de gastar GPU (fallback: gating observacional, `pi-webshop.md` §4.2) |
 
 ### 4.2 Control existencial
 
@@ -97,6 +97,16 @@ gatean).
   distintos — caveat "pruning interaction paradox" de KnowRL).
 - Fracción de turnos con R(t) = ∅ al final de episodios de score alto (¿el
   auto-annealing llegaría a activarse?).
+- **Predicciones derivadas de los datos reales del dataset**
+  (`pi-webshop.md` §8, agregadas 2026-06-12 pre-rollouts): b_attr/b_opt
+  altos ya en t=0 (los attrs/options son visibles en la instrucción del
+  student); el grueso de Σr_bwd viene de Δb_prod (la info genuinamente
+  oculta). Si esto sale, cuantifica el mapa dónde/por qué para WebShop.
+- **N.14 (ventana de historial)**: en el scoring offline el historial
+  completo está disponible — computar b_i con (a) la ventana-2 que la
+  política realmente ve en training (`env_manager.py:392`) y (b) historial
+  completo. Reportar cuántas caídas de b_i se explican por
+  salida-de-ventana vs navegación real. Decide N.14 con datos.
 
 ### 4.4 Alcance (honestidad pre-registrada)
 

@@ -97,9 +97,27 @@ tokens del valor canónico (normalización 1/L estilo IGPO Eq. 3 — ver
 [`paper-igpo.md`](../notes/paper-igpo.md)). Los tokens del wrapper NO entran
 a la suma; solo el valor.
 
-**Detalle de implementación**: los K beliefs del turno t comparten el prefijo
-h_t — con prefix caching son K continuaciones cortas sobre un solo prefill.
-Costo marginal ≈ cero frente al rollout.
+**Costo de implementación (corregido 2026-06-12)**: la versión original de
+esta sección decía "con prefix caching son K continuaciones cortas sobre un
+solo prefill; costo marginal ≈ cero". **Eso es falso con el código tal cual**:
+el path de scoring (`compute_log_prob`) va por el actor FSDP, sin prefix
+caching — cada query repaga el prefijo completo, y el belief pass cuesta
+≈ K× el pass de old_log_probs (~+30-80% del wall-clock del step; con el K
+efectivo ≈ 4 medido, ~7-11M token-forwards por iteración). Viable pero no
+gratis; la palanca si duele es scoring vía vLLM con APC. Detalle completo y
+verificado: [`piar-implementation-points.md`](piar-implementation-points.md)
+§7.4.
+
+**Inyección del wrapper — dos variantes a arbitrar en la Figura 1** (riesgo
+§7.5.4 del doc de implementación): el prompt de cada fila termina en
+`<|im_start|>assistant\n` tras un template que instruye a producir
+`<think>...<action>...`. (a) **Assistant-prefill** (barato): concatenar el
+wrapper ahí — pero puntúa g_i en un contexto que pide otra cosa y puede
+deprimir el nivel absoluto de b_i (otro golpe al gate; el backward, que usa
+deltas, es más robusto). (b) **User-message** (más LOC): reemplazar el bloque
+de instrucciones ReAct por la pregunta del wrapper como mensaje de usuario.
+P5 se corre para ambas; la que separe mejor queda fijada para training
+(regla de selección pre-registrada en `figura1-prereg.md`).
 
 ### 4.1 Caveat conocido: mass-splitting entre formas intercambiables
 
