@@ -184,15 +184,74 @@ Por episodio, en `experiments/ENNN/`:
 - Por acción: el tipo (`search` / `click-nav` / `click-opción-buy`) — lo
   exige el riesgo de loitering (pivot §10.2) y la Figura 1.
 
-## 7. Qué queda pendiente para cerrar #17
+## 7. Pendientes (actualizado 2026-06-12, post-extracción)
 
-1. **Descarga del dataset + correr `tools/extract_webshop_specs.py`**
-   (bloqueado: requiere Python local o la VM — no disponible en esta máquina
-   al 2026-06-12). Responde las preguntas de cobertura/riqueza/token-budget
-   del [plan de análisis](../notes/webshop-specs-analysis-plan.md) §2.
-2. **Adaptar `serialize_spec_for_teacher_prompt`** del extractor al formato
-   por componentes de §5 (hoy serializa la spec monolítica de C.5 pre-pivot).
-3. **Verificación de cuasi-ortogonalidad de los g_i** (caveat KnowRL "pruning
-   interaction paradox", [`paper-knowrl.md`](../notes/paper-knowrl.md)) — se
-   hace con datos de la Figura 1, no antes.
+1. ~~Descarga del dataset + correr el extractor~~ ✅ Hecho (mirror HF, §8).
+2. ~~Adaptar el extractor al formato por componentes~~ ✅ Hecho
+   (`decompose_goal_components` + `serialize_residual_block`, smoke-tested y
+   corrido contra el dataset real).
+3. **Verificación de cuasi-ortogonalidad de los g_i** (caveat KnowRL) — con
+   datos de la Figura 1, no antes.
 4. **τ global vs τ por tipo** (§4.1) — Figura 1.
+5. **Longitud de g_prod (name) offline** — requiere merge con
+   `items_shuffle.json` (5.5GB; diferido a la VM). **No bloquea nada**: en
+   runtime el env construye el goal con `name` incluido (`goal.py:48-58`),
+   así que la Figura 1 tiene g_prod disponible por episodio.
+6. **Subset de ~1.6K tareas con trayectorias humanas** (criterio original
+   pre-pivot de #17) — es otro artefacto (demos completas de Yao et al.), no
+   está en `items_human_ins.json`. Post-pivot pertenece a la **ablation A de
+   C.5** (fase 6), no al método. Se difiere a esa fase.
+
+## 8. Datos reales (2026-06-12 — 12,087 goals, dataset completo)
+
+Fuente: `items_human_ins.json` vía mirror HF verificado
+(`YWZBrandon/webshop-data`, sha256 `cf786675...`, blob idéntico en segundo
+mirror independiente; el Drive oficial está quota-exceeded). Corrido:
+`tools/extract_webshop_specs.py` → `experiments/E000/webshop-specs.json`.
+**12,087 goals** extraídos (número exacto del paper de WebShop), 164
+skipeados sin atributos, 10,014 ASINs únicos.
+
+| Métrica | Valor | Implicación |
+|---|---|---|
+| Attributes/goal | mediana **1** (dist: 1→8358, 2→3034, 3→539, ≥4→156) | La "spec rica" asumida por C.5 pre-pivot NO existe: 69.1% de goals tienen <2 attrs |
+| Options/goal | mediana 1 (0→2482, 1→6369, 2→2936, ≥3→300) | 20.5% sin opciones |
+| Keys de opciones recuperados | 70.8% como dict `{key: value}`; 29.2% keyless (fallback wrapper indexado) | El campo `options` del crudo permite recuperar el key posicionalmente; el resto usa el fallback de §4 |
+| K por goal (sin g_prod ni g_price) | mediana **2** | Con g_prod (siempre disponible en runtime) y g_price (casi siempre instanciado por el env): **K efectivo ≈ 4** |
+| Token budget del bloque full-golden | mediana 45, p99 60 tokens | Trivial — `max_prompt_length=4096` sobra; pregunta §2.3 del plan cerrada |
+| Calidad de los values | Mayormente frases cortas limpias; casos sucios reales (IDs numéricos como "color", caracteres fullwidth `（width）`) | Casos de prueba concretos para la canonicalización N.8 y el matching textual de P2'/P5 |
+
+### Lectura post-pivot (la que importa)
+
+El criterio pre-pivot de C.5 ("se sostiene si mediana ≥ 2 attrs") **falla** —
+pero ese criterio era para el forward monolítico, donde la spec necesitaba
+ser "rica" para dar señal. El diseño dual+residual cambia la pregunta:
+
+1. **Los attrs/options NO son información oculta**: salen de la instrucción
+   humana, que el student VE en su prompt. Su "privilegio" es estructural
+   (cuáles partes de la instrucción son criterios duros del reward del env),
+   no informacional. Predicción derivada para la Figura 1: **b_attr y b_opt
+   arrancan altos en t=0** (están en la instrucción) → el gating los saca
+   del residual temprano; el auto-annealing sobre ellos es casi inmediato.
+2. **La información genuinamente oculta de WebShop es g_prod** (qué producto
+   del catálogo satisface la instrucción — el student no lo sabe hasta
+   navegar) y, parcialmente, la combinación exacta de opciones de ese
+   producto. Predicción derivada: **el backward en WebShop gana información
+   principalmente vía Δb_prod**, y r_bwd debería concentrarse en las
+   acciones que revelan el producto (search con buenos resultados,
+   click-producto).
+3. Esto **cuantifica el mapa dónde/por qué** antes de correr nada: WebShop
+   es el environment de "PI mayormente visible en la instrucción" (poca
+   info oculta, K efectivo chico ≈ 4, un solo componente verdaderamente
+   oculto), ALFWorld el de estado oculto genuino. Si el dual gana en
+   ALFWorld y empata en WebShop, esa asimetría ES el resultado del mapa —
+   no un fracaso del método.
+4. **C.5 se sostiene con esta reinterpretación** (la spec estructurada sigue
+   siendo la PI correcta — es la que el reward del env puntúa), pero su
+   fila en `design-decisions.md` queda actualizada con el dato real y la
+   lectura post-pivot. El fallback pre-pivot del plan ("pivot a
+   spec+trayectoria humana si mediana < 2") no aplica mecánicamente: el
+   dual no necesita spec rica, necesita componentes verificables con al
+   menos uno genuinamente oculto — y lo hay.
+5. **Bonus para el mass-splitting** (§4.1): con mediana 1 atributo, el
+   wrapper indexado `#k` no tiene ambigüedad en el 69% de los goals — el
+   problema queda acotado a la cola de goals multi-atributo.

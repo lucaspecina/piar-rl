@@ -1,16 +1,14 @@
 # PIAR — Estado actual
 
-> Banner (2026-06-12): **Pivot 2026-06 — el proyecto se re-centró en el
-> reward bidireccional (forward pragmático + backward epistémico) + PI
-> residual gateada por belief.** El delta original (forward log-ratio
-> standalone) murió como contribución (TAMTRL/OPCD/CriticSearch); el espejo
-> backward está tomado (IGPO). Fuente de verdad del pivot:
-> [`research/synthesis/pivot-2026-06.md`](research/synthesis/pivot-2026-06.md).
-> **Fase research parcialmente reabierta** (vecinos nuevos consolidados
-> 2026-06-12); el pivot es 100% docs + paper notes + pre-registro, no
-> requiere compute. Código de iStar vendoreado en [`code/`](code/) sin
-> modificaciones propias. **Nada corrido aún** — falta Azure ML Y-TEC
-> operacional.
+> Banner (2026-06-12, fin del día): **Pivot 2026-06 EJECUTADO de punta a
+> punta** — reward bidireccional (forward pragmático + backward epistémico)
+> + PI residual gateada por belief. PROJECT.md aplicado (LA PREGUNTA nueva,
+> invariantes 10/11), pre-registro de Figura 1 **congelado**, epic #19
+> cerrado. Formalización del método:
+> [`research/synthesis/pivot-2026-06.md`](research/synthesis/pivot-2026-06.md) §4.
+> Código de iStar vendoreado en [`code/`](code/) sin modificaciones propias.
+> **Nada corrido aún** — gatean: dataset WebShop (#17, Drive quota exceeded)
+> y Azure ML Y-TEC (#16).
 
 ## 1. Qué corre HOY
 

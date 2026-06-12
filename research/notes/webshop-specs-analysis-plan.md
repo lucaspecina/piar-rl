@@ -3,10 +3,23 @@
 > **Qué es esto:** el plan para qué responder cuando `tools/extract_webshop_specs.py`
 > corra contra el dataset real. Define **qué buscar, qué decidir, qué bloquea fase 4**.
 >
-> **Status:** plan a ejecutar. Bloqueado por descarga del dataset
-> (`code/agent_system/environments/env_package/webshop/webshop/setup.sh -d all`).
+> **Status: ✅ EJECUTADO (2026-06-12).** Resultados y decisiones en
+> [`research/synthesis/pi-webshop.md`](../synthesis/pi-webshop.md) §8.
+> Resumen: 12,087 goals (exacto al paper); mediana 1 attr/goal → el criterio
+> pre-pivot de §4.1 ("mediana ≥ 2") FALLA, pero la lectura post-pivot
+> reinterpreta: attrs/options son visibles en la instrucción (privilegio
+> estructural), la info oculta real es g_prod → C.5 se sostiene
+> reinterpretada. Token budget trivial (p99 60 tokens). Notas operativas:
+> el Drive oficial está quota-exceeded — usar el mirror HF
+> `YWZBrandon/webshop-data` (sha256 verificado, blob duplicado en
+> `ai-hyz/MemoryArena-product-db`); `setup.sh` vendoreado apunta al Drive
+> muerto → reemplazar por el mirror al hacer setup en la VM. El archivo
+> crudo es `{asin: [instrucciones]}` (sin name/category — eso requiere
+> items_shuffle.json 5.5GB, diferido a la VM; no bloquea: el env construye
+> el goal con name en runtime).
 >
-> **Refs:** #17 (issue), C.3 + C.5 (decisiones), piar-implementation-points.md §3.
+> **Refs:** #17 (issue), C.3 + C.5 (decisiones), pi-webshop.md (formato por
+> componentes post-pivot), piar-implementation-points.md §3.
 
 ---
 

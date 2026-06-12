@@ -52,30 +52,75 @@ PRICE_RANGE = [10.0 * i for i in range(1, 100)]
 
 
 def load_products_with_human_instructions(items_human_ins_path: Path) -> list[dict]:
-    """Carga items_human_ins.json — productos con instrucciones humanas asociadas.
+    """Carga items_human_ins.json y normaliza al formato lista-de-productos.
 
-    Estructura esperada (de items_human_ins.json):
-    [
-        {
-            "asin": "B07XXX",
-            "category": "Electronics",
-            "query": "...",
-            "name": "...",
-            "product_category": "Electronics > Audio > Headphones",
-            "instructions": [
-                {
-                    "instruction": "I am looking for a ...",
-                    "instruction_attributes": ["brand:Sony", "color:black"],
-                    "instruction_options": {"size": "medium"}
-                },
-                ...
-            ]
-        },
-        ...
-    ]
+    Soporta DOS formatos (verificado 2026-06-12 contra el mirror HF
+    YWZBrandon/webshop-data, sha256 cf786675...):
+
+    1. **Crudo (el archivo real del release)**: dict {asin: [instrucciones]}.
+       Cada instrucción: {asin, instruction, attributes, options,
+       instruction_attributes, instruction_options, assignment_id, worker_id}.
+       NO trae name/category/product_category — esos viven en items_shuffle.json
+       (5.5GB) y se mergean en engine.py al cargar el env. Acá quedan en None;
+       el componente g_prod se cuenta como "diferido" en el análisis.
+       `instruction_options` es LISTA de valores; los keys se recuperan del
+       campo paralelo `options` ("key: value" strings, posicional).
+    2. Post-merge (lo que asumía la v1 de este script): lista de productos con
+       campo "instructions" y metadata del producto.
     """
     with items_human_ins_path.open("r", encoding="utf-8") as f:
-        return json.load(f)
+        data = json.load(f)
+
+    if isinstance(data, list):
+        return data
+
+    # Formato crudo: normalizar a lista de productos sintéticos.
+    products = []
+    for asin, instructions in data.items():
+        norm_ins = []
+        for ins in instructions:
+            norm_ins.append({
+                "instruction": ins.get("instruction", ""),
+                "instruction_attributes": ins.get("instruction_attributes", []),
+                "instruction_options": _recover_option_keys(
+                    ins.get("options", []), ins.get("instruction_options", [])
+                ),
+            })
+        products.append({
+            "asin": asin,
+            "category": None,
+            "query": None,
+            "name": None,  # requiere items_shuffle.json (merge diferido a la VM)
+            "product_category": None,
+            "instructions": norm_ins,
+        })
+    return products
+
+
+def _recover_option_keys(options: list, instruction_options: list) -> dict | list:
+    """Recupera los keys de las opciones desde el campo `options` del crudo.
+
+    `options` trae strings "key: value" ("color: blue"); `instruction_options`
+    trae solo los values elegidos ("blue"), posicionalmente paralelos. Si el
+    paralelismo se sostiene (len igual y cada value aparece en su string),
+    devuelve dict {key: value} — el formato que pi-webshop.md §2 asume para
+    g_opt (key al wrapper). Si no, devuelve la lista cruda de values (fallback
+    con wrapper genérico, loggeado en el análisis como `opt_keyless`).
+    """
+    if not instruction_options:
+        return {}
+    if len(options) == len(instruction_options):
+        recovered = {}
+        for opt_str, value in zip(options, instruction_options):
+            if not isinstance(opt_str, str) or ":" not in opt_str:
+                return list(instruction_options)
+            key, _, opt_value = opt_str.partition(":")
+            if str(value).strip().lower() not in opt_value.strip().lower():
+                return list(instruction_options)
+            recovered[key.strip()] = str(value).strip()
+        if len(recovered) == len(instruction_options):
+            return recovered
+    return list(instruction_options)
 
 
 def extract_goals(
@@ -161,15 +206,28 @@ def decompose_goal_components(goal: dict) -> list[dict]:
         })
 
     opts = goal.get("goal_options", {}) or {}
-    for key in sorted(opts):
-        components.append({
-            "type": "opt",
-            "wrapper": (f"Based on the interaction so far, the required "
-                        f"{key} option of the target product is (answer with "
-                        f"the exact option value):"),
-            "value": str(opts[key]),
-            "residual_label": f"- Required {key}: {opts[key]}",
-        })
+    if isinstance(opts, dict):
+        for key in sorted(opts):
+            components.append({
+                "type": "opt",
+                "wrapper": (f"Based on the interaction so far, the required "
+                            f"{key} option of the target product is (answer with "
+                            f"the exact option value):"),
+                "value": str(opts[key]),
+                "residual_label": f"- Required {key}: {opts[key]}",
+            })
+    else:
+        # Fallback keyless (no se pudo recuperar el key del campo `options`):
+        # wrapper genérico indexado, mismo trade-off que g_attr (§4.1 pi-webshop).
+        for k, value in enumerate(sorted(str(v) for v in opts), start=1):
+            components.append({
+                "type": "opt",
+                "wrapper": (f"Based on the interaction so far, required option "
+                            f"#{k} of the target product is (answer with the "
+                            f"exact option value):"),
+                "value": value,
+                "residual_label": f"- Required option: {value}",
+            })
 
     price = goal.get("price_upper")
     if price is not None and price < 1_000_000:
@@ -237,7 +295,10 @@ def serialize_spec_for_teacher_prompt(goal: dict, include_price: bool = True) ->
 
     opts = goal.get("goal_options", {})
     if opts:
-        opts_str = ", ".join(f"{k}={v}" for k, v in opts.items())
+        if isinstance(opts, dict):
+            opts_str = ", ".join(f"{k}={v}" for k, v in opts.items())
+        else:
+            opts_str = ", ".join(str(v) for v in opts)
         lines.append(f"- Options: {opts_str}")
 
     if include_price and goal.get("price_upper") is not None:
@@ -298,7 +359,15 @@ def analyze_goals(goals: list[dict]) -> dict:
         k_per_goal.append(len(comps))
         for c in comps:
             value_len_by_type.setdefault(c["type"], []).append(len(c["value"]))
+    n_name_missing = sum(1 for g in goals if not g.get("name"))
+    n_opts_keyless = sum(1 for g in goals
+                         if isinstance(g.get("goal_options"), list) and g["goal_options"])
     components_analysis = {
+        "g_prod_deferred_pct": round(n_name_missing / n * 100, 1),
+        "g_prod_note": ("name=None requiere merge con items_shuffle.json (5.5GB, en la VM); "
+                        "K_per_goal NO incluye g_prod en esos goals"),
+        "opt_keyless_count": n_opts_keyless,
+        "opt_keyless_pct": round(n_opts_keyless / n * 100, 1),
         "K_per_goal": {
             "min": min(k_per_goal),
             "max": max(k_per_goal),
