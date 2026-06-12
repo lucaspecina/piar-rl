@@ -67,6 +67,30 @@
 
 ---
 
+## N · Decisiones del pivot 2026-06 (reward bidireccional + PI residual)
+
+> Origen: [`pivot-2026-06.md`](pivot-2026-06.md) §7 (fuente de verdad del
+> pivot). El forward log-ratio pasa de contribución standalone a componente;
+> el método vigente es dual (forward pragmático + backward epistémico) con
+> PI residual gateada por belief. Formalización en pivot §4.
+
+| # | Decisión | Status | Fuente / análisis | Issue |
+|---|---|---|---|---|
+| N.1 | **PI descompuesta en componentes fácticos verificables** `g = (g_1, ..., g_K)` (WebShop: producto target, atributos, opción, precio; ALFWorld: goal + hechos del estado oculto). Extiende invariante 5. | 🔒 Cerrada (2026-06-12) | Pivot §4.1. Issue #17 promovido de tarea lateral a primer ladrillo del método. KnowRL valida la descomposición atómica como idea ([`paper-knowrl.md`](../notes/paper-knowrl.md)) — caveat anticipado: "pruning interaction paradox" (utilidad de componentes no aditiva); mitigación: los g_i fácticos de WebShop son cuasi-ortogonales, verificable en Figura 1. | [#17](https://github.com/lucaspecina/piar-rl/issues/17) |
+| N.2 | **PI vive en espacio de hechos, nunca de acciones.** Si la PI opina sobre política ("te conviene hacer X"), el reward degenera en imitación del opinador. | 🔒 Cerrada → **propuesta como invariante 10** (edición de PROJECT.md pendiente de aprobación de Lucas — ver [`proposal-project-md.md`](proposal-project-md.md)) | Pivot §4.1 + §7 N.2. Anti hint-generativo. | — |
+| N.3 | **PI entra solo al canal del reward (prompts del scorer), nunca al prompt del student.** El student rollea siempre a ciegas; lo que se apaga es la señal, no el input. | 🔒 Cerrada → **propuesta como invariante 11** (ídem N.2, pendiente aprobación) | Pivot §2 (distinción estructural) + §7 N.3. Diferenciador vs familia QuestA/KnowRL: ellas manejan el train/test mismatch por schedule (QuestA) o minimalidad estática (KnowRL); ninguna lo elimina ([`paper-knowrl.md`](../notes/paper-knowrl.md) §7.4, [`paper-menores-pivot-2026-06.md`](../notes/paper-menores-pivot-2026-06.md) §3). | — |
+| N.4 | **Gating duro con umbral τ sobre b_i(t−1)** para definir el residual R(t) (causalidad: se gatea con el belief *antes* de la acción puntuada). | ➡️ Inclinada | Pivot §4.3 + §7 N.4. Soft-gating (peso continuo) como ablation; τ inicial a calibrar en Figura 1 (pivot §8). | — |
+| N.5 | **λ (peso del backward en r_t = ẑ(r_fwd) + λ·ẑ(r_bwd))** | 🟡 Abierta | Pivot §4.4 + §7 N.5. Grid chico pre-registrado compartido entre brazos; ablations λ=0 y fwd=0 son los brazos A1/A2 del diseño experimental (pivot §9). | — |
+| N.6 | **Historial del backward: ¿incluye thoughts del agente?** Riesgo de autosugestión (belief sube por texto propio sin evidencia del environment). | 🟡 Abierta | Pivot §7 N.6. Default: historial completo; ablation: solo acciones+observaciones. Dato nuevo: IGPO condiciona al historial completo con thoughts incluidos y funciona en search ([`paper-igpo.md`](../notes/paper-igpo.md)) — pero search tiene observaciones dominantes; en ejecución el riesgo es mayor. | — |
+| N.7 | **Normalización separada vs conjunta de los dos scores.** | 🟡 Abierta (default separada, ahora con evidencia) | Pivot §7 N.7. El repo de IGPO expone ambas (`info_gain_norm_mode`); su Tabla 5 favorece **separada** empíricamente en search ([`paper-igpo.md`](../notes/paper-igpo.md)). Arrancar separada; revalidar en ejecución. | — |
+| N.8 | **Canonicalización de g_i (parafraseo).** El belief b_i depende de la serialización textual del componente; parafraseos válidos no deben cambiar el gating. | 🟡 Abierta | Pivot §7 N.8 + riesgo §10.3. WebShop: campos estructurados mitigan; definir formato canónico en #17. | [#17](https://github.com/lucaspecina/piar-rl/issues/17) |
+| N.9 | **Validación de calibración de b_i ANTES de confiar en el gating**: correlacionar b_i con values Monte Carlo estilo Math-Shepherd en subset chico. | 🔒 Cerrada como requisito | Pivot §7 N.9 + riesgo §10.1 (el punto más atacable en review). Math-Shepherd como referencia de estimador MC ([`paper-math-shepherd.md`](../notes/paper-math-shepherd.md)). | — |
+| N.10 | **GiGPO como baseline obligatorio** (brazo B2), además de iStar (B1). | 🔒 Cerrada (2026-06-12) | Pivot §7 N.10. SOTA critic-free en ALFWorld (90.2) y WebShop (75.2) con Qwen2.5-7B ([`paper-gigpo.md`](../notes/paper-gigpo.md)). Si PIAR no supera a GiGPO, la PI no aporta sobre estadística entre rollouts. Trainer ya vendoreado en `code/examples/gigpo_trainer/` — B2 casi gratis; divergencias script-vs-paper a reconciliar pre-registro (nota §8). HCAPO (91.4 ALFWorld) entra a la lista de números de referencia ([`paper-menores-pivot-2026-06.md`](../notes/paper-menores-pivot-2026-06.md) §1). | — |
+| N.11 | **ALFWorld sube de "fase 6" a benchmark de primera clase.** Ahí vive la predicción del backward (estado oculto); WebShop solo no puede responder LA PREGUNTA nueva. | 🔒 Cerrada (2026-06-12) | Pivot §7 N.11 + §9 (secuencia mínima publicable incluye ALFWorld). Cambio de roadmap propuesto en [`proposal-project-md.md`](proposal-project-md.md) (pendiente aprobación). | — |
+| N.12 | **Naming del método para el paper.** | 🟡 Abierta | Pivot §7 N.12. El repo sigue siendo `piar-rl`; el nombre se decide con resultados. | — |
+
+---
+
 ## E · Preguntas abiertas (de qué deberían salir las respuestas)
 
 | # | Pregunta | Cómo se resuelve |
@@ -102,4 +126,17 @@
 | PRIME — RL framework con implicit PRM | [`paper-prime.md`](../notes/paper-prime.md) | [#6](https://github.com/lucaspecina/piar-rl/issues/6) ✅ | Framework reference: implicit PRM de Yuan + online update con CE + combinación con outcome via LOO baseline. Plantilla de pipeline para PIAR. Confirma β=0.05 y KL=0 como defaults. Dispara D.6 (accuracy filtering candidato) y E.7 (¿teacher degrada?). |
 | Math-Shepherd — predecesor histórico | [`paper-math-shepherd.md`](../notes/paper-math-shepherd.md) | [#8](https://github.com/lucaspecina/piar-rl/issues/8) ✅ | Step labels MC automáticos. ~1/38× más caro que implicit PRM. HE sobreestima, SE subestima — implicit PRM es estimador intermedio robusto. Sin training code oficial; modelos/datos en HuggingFace. **No aporta primitivas a PIAR**, solo motivación operativa de implicit. |
 | π-Distill — vecino conceptual más cercano | [`paper-pi-distill.md`](../notes/paper-pi-distill.md) | [#10](https://github.com/lucaspecina/piar-rl/issues/10) ✅ | KL distillation con PI teacher en agentic multi-turn. Mismo spirit que PIAR pero entrena al teacher (PIAR lo deja frozen). Aporta taxonomía de PI types (refuerza C.5), evidencia empírica de leakage token-level (refuerza D.1), y dispara D.7 (frequency penalty) y D.8 (sanity check inicial) como candidatas. OPSD-Penaloza ≈ OPSD-Zhao concurrent rediscovery. |
-| Síntesis cruzada (pendiente) | — | [#9](https://github.com/lucaspecina/piar-rl/issues/9) ⏳ | **Cierre del epic — ahora desbloqueada.** |
+| Síntesis cruzada | [`papers-cross-mapping.md`](papers-cross-mapping.md) | [#9](https://github.com/lucaspecina/piar-rl/issues/9) ✅ | Cierre del epic #2 (2026-05-11). |
+
+---
+
+## H · Trazabilidad — papers del pivot 2026-06
+
+| Paper | Notas | Aporte principal |
+|---|---|---|
+| IGPO (ICLR 2026) — information gain en search agents | [`paper-igpo.md`](../notes/paper-igpo.md) | Valida el backward (Δ log π(golden\|h) por turno) en search/QA. Normalización separada gana (N.7). Ejecución quedó fuera de su claim → brazo A2 libre. |
+| TAMTRL — teacher same-model como reward | [`paper-tamtrl.md`](../notes/paper-tamtrl.md) | Mata el forward standalone. 5 diferencias documentadas para related work (incl. gating por outcome binario que PIAR no tiene). |
+| Survey credit assignment (41+6 métodos) | [`paper-survey-ca.md`](../notes/paper-survey-ca.md) | Due diligence: dual + residual + mapa son celdas vacías. Gap explícito en su §4.2. GiGPO/HCAPO como números a batir. |
+| GiGPO (NeurIPS 2025) — estadística entre rollouts | [`paper-gigpo.md`](../notes/paper-gigpo.md) | Baseline obligatorio B2 (N.10). Degrada a GRPO sin estados repetidos — dimensión donde PIAR predice separarse. Trainer ya en `code/examples/`. |
+| KnowRL — guía mínima-suficiente lado-student | [`paper-knowrl.md`](../notes/paper-knowrl.md) | Valida descomposición atómica + dosificación, del lado equivocado (prompt del student). Contraste estructural para invariante 11 propuesto. Pruning interaction paradox como riesgo para N.1. |
+| Menores: HCAPO, IG semántico, QuestA, OPCD/OEL | [`paper-menores-pivot-2026-06.md`](../notes/paper-menores-pivot-2026-06.md) | HCAPO = ratio mecánico same-model con outcome en hindsight (vecino subestimado por el pivot doc). Survey OPD confirma cero métodos con PI como reward. QuestA = schedule manual (contraste inv. 11). |
