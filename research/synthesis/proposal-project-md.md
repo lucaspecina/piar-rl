@@ -5,6 +5,11 @@
 > ([`pivot-2026-06.md`](pivot-2026-06.md) §11, bloque "requiere aprobación").
 > **NO está aplicada** — PROJECT.md sigue reflejando el estado pre-pivot.
 >
+> **v2 (2026-06-12):** incorpora el review externo — cierres de los loopholes
+> de los invariantes 10/11 (trayectoria-experta-como-hecho, selección como
+> canal de opinión, lavado por imitación/destilación) y reordenamiento de
+> HCAPO como vecino #1 tras su verificación independiente.
+>
 > **Cómo revisar:** cada cambio tiene bloque ANTES (texto actual) y DESPUÉS
 > (texto propuesto). Los textos DESPUÉS están listos para copy-paste.
 > Tracking: [#22](https://github.com/lucaspecina/piar-rl/issues/22).
@@ -108,8 +113,10 @@ Misma pregunta de fondo, planteada contra los baselines concretos:
 Brazos experimentales y prioridades en `pivot-2026-06.md` §9 (A0–A4, B1–B2,
 C1–C2). Predicciones pre-registradas y gate go/no-go (Figura 1) en §8.
 Controles no-opcionales: shuffled-golden (D.9) sobre el forward Y el belief
-del backward; el par mínimo outcome-label-in-prompt (C2) como control de
-riqueza-vs-ubicación contra iStar.
+del backward; el par mínimo outcome-label-in-prompt (C2), que post-HCAPO
+sube de control interno de riqueza-vs-ubicación a **comparación directa
+contra la familia hindsight publicada** (con el matiz de que C2 sí computa
+el contraste dos-contextos que HCAPO no implementa).
 
 > **Lineage:** la reformulación operativa anterior ("PIAR vs iStar como
 > nearest-neighbor replacement study", 2026-05-11) quedó superada por el
@@ -186,12 +193,23 @@ Agregar al final de la lista existente (los bullets actuales quedan; el de
 >   En PIAR la PI entra **solo al canal del reward** (invariante 11): el
 >   student rollea siempre a ciegas y lo que se apaga (solo, vía el gating
 >   por belief) es la señal. Ver [`paper-knowrl.md`](research/notes/paper-knowrl.md) §6–§7.
-> - **No es un juez generativo ni hindsight prompteado (CriticSearch, HCAPO,
->   C3, CCPO).** PIAR no le pide a un LLM que *opine* scores post-hoc: los dos
->   scores son cantidades mecánicas de logprobs del mismo modelo (sin
->   generación, sin rúbrica, sin parsing de juicios). Y su PI es fáctica del
->   dataset/simulador (invariante 10), no un outcome auto-generado en
->   hindsight como HCAPO. Ver [`paper-menores-pivot-2026-06.md`](research/notes/paper-menores-pivot-2026-06.md) §1.
+> - **No es un juez generativo (CriticSearch, C3, CCPO).** PIAR no le pide a
+>   un LLM que *opine* scores post-hoc: los dos scores son cantidades
+>   mecánicas de logprobs del mismo modelo (sin generación, sin rúbrica, sin
+>   parsing de juicios).
+> - **No es hindsight credit mecánico (HCAPO).** HCAPO es el vecino mecánico
+>   más cercano (logprobs same-model, sin crítico entrenado) y el primero a
+>   diferenciar en related work — por encima de TAMTRL. Las diferencias:
+>   (i) su "PI" es el outcome realizado del propio rollout (consistencia con
+>   *lo que pasó*); la de PIAR son hechos del dataset/simulador que el agente
+>   nunca observó (consistencia con *la verdad*); (ii) su implementación
+>   (Eq. 7) puntúa UN contexto de hindsight normalizado intra-trayectoria —
+>   nunca computa el contraste con-PI/sin-PI que define al forward de PIAR;
+>   (iii) multiplicativo sobre el return vs aditivo en el advantage; (iv) sin
+>   backward, sin residual, sin mapa. El brazo C2 (outcome-label-in-prompt)
+>   es la comparación directa contra esta familia. Ver
+>   [`paper-menores-pivot-2026-06.md`](research/notes/paper-menores-pivot-2026-06.md) §1
+>   (verificado dos veces, 2026-06-12).
 
 ---
 
@@ -201,25 +219,47 @@ Agregar después del invariante 9, con el mismo formato:
 
 ### DESPUÉS (agregar)
 
-> 10. **La PI vive en el espacio de hechos, nunca en el de acciones.** Los
->     componentes `g_i` son hechos verificables, determinísticos, del
->     dataset/simulador (producto target, atributos, ubicaciones de objetos)
->     — nunca recomendaciones sobre la política ("te conviene hacer X",
->     "el siguiente paso es Y"). Si la PI opina sobre acciones, el reward
+> 10. **La PI vive en el espacio de hechos, nunca en el de acciones.** PI
+>     válida = hechos sobre el **estado del mundo o el objetivo**, queryables
+>     del dataset/simulador **sin ejecutar política alguna** (producto target,
+>     atributos, ubicaciones de objetos). Dos exclusiones explícitas que
+>     cierran los loopholes conocidos:
+>
+>     - **Demostraciones, trayectorias expertas y cualquier secuencia de
+>       acciones quedan excluidas aunque estén en el dataset.** Una traza
+>       experta es técnicamente "un hecho del dataset", pero usarla como PI
+>       es exactamente la degeneración a imitación que este invariante
+>       prohíbe. (Las trayectorias humanas de WebShop quedan confinadas a la
+>       ablation A de C.5, reportada como tal — nunca como PI del método.)
+>     - **La selección/orden de los hechos no puede ser canal de opinión.**
+>       Toda función que decide qué componentes ve el scorer y en qué orden
+>       depende solo de (dataset, estado del simulador, beliefs medidos bajo
+>       π_old versionado) — nunca de juicios de utilidad-para-la-próxima-acción.
+>       "Mejorar" el gating con heurísticas de relevancia para la acción
+>       siguiente es meter política por la puerta de atrás vía curation.
+>
+>     Si la PI opina sobre acciones (directa o por curation), el reward
 >     degenera en imitación del opinador y el método colapsa a la familia
 >     juez-generativo/hints — otro paper. Extiende el invariante 5: además de
 >     reproducible y verificable, la PI es *fáctica*. (Origen: N.2,
->     `pivot-2026-06.md` §4.1.)
+>     `pivot-2026-06.md` §4.1; cierres post-review externo 2026-06-12.)
 >
-> 11. **La PI entra solo al canal del reward, nunca al prompt del student.**
->     El student rollea siempre a ciegas — en training y en test no hay
->     diferencia en su input. La PI aparece únicamente en los prompts del
->     *scorer* (los forward passes que computan r_fwd y b_i). Consecuencias:
->     no hay train/test mismatch del input, no hay nada que "retirar" del
->     prompt con un schedule (lo que se apaga, vía el gating por belief, es
->     la señal), y el invariante 3 queda subsumido y reforzado. Este es el
->     diferenciador estructural contra toda la familia hints
->     (QuestA/KnowRL/...). (Origen: N.3, `pivot-2026-06.md` §2 y §7.)
+> 11. **La PI influye en los pesos del student únicamente a través del
+>     escalar `r_t` en el policy gradient.** Nunca como texto en el contexto
+>     del student (training, eval o test), y **nunca como target de imitación,
+>     distillation o fine-tuning** — generar texto condicionado a la PI y
+>     destilarlo al student cumple la letra de "no está en su prompt" y viola
+>     todo; queda explícitamente prohibido. La PI aparece únicamente en los
+>     prompts del *scorer* (los forward passes que computan r_fwd y b_i), y
+>     de ahí solo sale un escalar por acción — pocos bits, que es
+>     precisamente lo que hace defendible el claim de no-contaminación.
+>     Consecuencias: no hay train/test mismatch del input, no hay nada que
+>     "retirar" del prompt con un schedule (lo que se apaga, vía el gating
+>     por belief, es la señal), y el invariante 3 queda subsumido y
+>     reforzado. Es el diferenciador estructural contra la familia hints
+>     (QuestA/KnowRL/...) y contra la rama distillation (OPSD/π-Distill/OPCD).
+>     (Origen: N.3, `pivot-2026-06.md` §2 y §7; cierre del lavado por
+>     imitación post-review externo 2026-06-12.)
 
 ---
 
