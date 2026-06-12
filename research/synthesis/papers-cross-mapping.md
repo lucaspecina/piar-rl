@@ -7,6 +7,14 @@
 > Para decisiones de diseño específicas (β, α, snapshot del teacher, etc.) ir
 > a [`design-decisions.md`](design-decisions.md). Este doc es el **story
 > cross-paper** + el delta explícito, no el índice de decisiones.
+>
+> ⚠️ **Actualización 2026-06-12**: el delta original ("celda vacía"
+> multi-turn × PI-en-prompt × frozen) **fue ocupado** por la literatura de
+> feb–jun 2026 (TAMTRL en variante; IGPO tomó el espejo). El mapa de las
+> secciones siguientes sigue siendo válido como historia de los 7 vecinos
+> originales, pero el posicionamiento vigente de PIAR está en la sección
+> **"Pivot 2026-06"** al final de este doc y en
+> [`pivot-2026-06.md`](pivot-2026-06.md) (fuente de verdad del pivot).
 
 ## TL;DR — dónde vive PIAR en la literatura
 
@@ -253,3 +261,82 @@ operativa contra iStar"):
 > privilegiada en el contexto del mismo modelo (golden answer en el prompt),
 > produciendo igual o mejor señal per-paso con un setup más simple (sin
 > entrenar juez)?*
+
+---
+
+## Pivot 2026-06 — mapa actualizado y veredicto de novedad
+
+> Agregado 2026-06-12. Fuente de verdad: [`pivot-2026-06.md`](pivot-2026-06.md).
+> El ciclo de research del 2026-06-12 reveló que la fase 1 tenía un punto
+> ciego (la línea information-gain y los desarrollos feb–jun 2026). Esta
+> sección reemplaza el posicionamiento de "La celda vacía" de arriba.
+> Paper notes nuevos: [`paper-igpo.md`](../notes/paper-igpo.md),
+> [`paper-tamtrl.md`](../notes/paper-tamtrl.md),
+> [`paper-survey-ca.md`](../notes/paper-survey-ca.md),
+> [`paper-gigpo.md`](../notes/paper-gigpo.md),
+> [`paper-knowrl.md`](../notes/paper-knowrl.md),
+> [`paper-menores-pivot-2026-06.md`](../notes/paper-menores-pivot-2026-06.md).
+
+### Mapa de literatura actualizado (vecinos nuevos)
+
+| Familia | Métodos clave | Mecanismo | Relación con PIAR |
+|---|---|---|---|
+| Juez entrenado | AgentPRM, SWEET-RL, iStar, StepAgent | Segundo modelo (o pesos extra) puntúa pasos | Baseline (iStar). SWEET-RL = privilegio en critic entrenado |
+| Juez prompteado / hindsight | HCAPO¹, C3, CCPO, CriticSearch | LLM congelado evalúa post-hoc y emite señal por turno | CriticSearch usa PI (gold answer) en el prompt del crítico → vecino del forward, pero generativo/opinado |
+| Estadística entre rollouts | **GiGPO** (NeurIPS 2025), POAD, SLEA-RL | Agrupa acciones desde el mismo estado entre rollouts → advantage por paso, sin juez | **Baseline obligatorio nuevo (N.10, brazo B2).** Limitación: degrada a GRPO sin estados repetidos entre rollouts — la dimensión exacta donde PIAR predice separarse |
+| Information-theoretic | **IGPO** (ICLR 2026), IG semántico (2602.00845) | Δ log π(golden \| historial) como reward por turno | = nuestro backward, validado solo en search/QA. IGPO v2 renombró a "Search Agents" → ejecución quedó fuera de su claim (brazo A2 libre) |
+| Privileged context como loss | OPSD, π-Distill, **OPCD/OEL** (2026) | Teacher = mismo modelo + contexto; supervisa vía KL | Misma asimetría que el forward, canalizada como distillation, no como reward en el advantage |
+| Teacher same-model como reward | **TAMTRL** (2603.21663) | Mismo modelo, dos contextos (chunk filtrado por GT); prob del teacher por turno, min-max normalizada, gateada por outcome binario², como reward shaping multi-turn | **El vecino que mata al forward standalone.** Difiere en: prob del teacher a secas (no ratio teacher/student), PI = documento filtrado (no golden estructurada), dominio = compresión long-context (no agentes de decisión), sin descomposición dual |
+| Hints al student | QuestA, KnowRL³, BREAD, Prefix-RFT, UFT, Guide, Scaf-GRPO, AHRL (ERNIE 5.0) | Solución parcial en el prompt DEL STUDENT durante rollout | Familia estructuralmente opuesta al residual: contaminan la política. KnowRL es el vecino conceptual más cercano (guía mínima-suficiente, descomposición atómica) pero del lado del student, en math single-turn |
+
+Correcciones post-verificación de los papers (2026-06-12), donde la nota
+difiere de la tabla original del pivot doc:
+
+1. **HCAPO** resultó ser un **ratio mecánico de logprobs same-model
+   dos-contextos** (ρ = π_hind/π, clipped, canal multiplicativo sobre el
+   return), no un juez generativo que "razona y opina". Está estructuralmente
+   más cerca del forward de PIAR de lo que la familia sugiere; las
+   diferencias reales son: PI = outcome auto-generado en hindsight (no golden
+   fáctica del dataset), canal multiplicativo (no aditivo al advantage), y
+   sin dual/residual. Reporta ALFWorld 91.4 / WebShop 73.8 con
+   Qwen2.5-7B — entra a la lista de números a batir junto a GiGPO. Ver
+   [`paper-menores-pivot-2026-06.md`](../notes/paper-menores-pivot-2026-06.md) §1.
+2. **TAMTRL** además gatea el reward multiplicativamente por el outcome
+   binario (trayectorias fallidas reciben 0 en todos los turnos) — quinta
+   diferencia explotable: PIAR da señal densa independiente del outcome. Ver
+   [`paper-tamtrl.md`](../notes/paper-tamtrl.md).
+3. **KnowRL no tiene retirada por schedule** — fija subsets mínimos offline
+   (minimalidad estática). La caracterización precisa de la familia hints:
+   manejan el train/test mismatch *por schedule (QuestA-style) o por
+   minimalidad estática (KnowRL-style)*; ninguna lo elimina, porque la info
+   entra a la política. Ver [`paper-knowrl.md`](../notes/paper-knowrl.md) §7.4.
+
+**Distinción estructural que define al residual** (related work + invariante
+11 propuesto): en toda la familia de hints, la información entra al *prompt
+del student* y por lo tanto a la política → hay train/test mismatch del input
+y hace falta annealing programado (o minimalidad estática). En PIAR la PI
+entra **solo al canal del reward** (prompts del scorer): el student rollea
+siempre a ciegas, no hay nada que retirar del input, y lo que se apaga (solo)
+es la señal.
+
+### Veredicto de novedad (2026-06-12)
+
+| Pieza | Estado | Evidencia |
+|---|---|---|
+| Forward solo (golden completa en prompt del scorer, log-ratio como step reward) | **Muerto como contribución** | TAMTRL + OPCD + CriticSearch (+ HCAPO con outcome en hindsight) |
+| Backward solo (Δ belief hacia golden) | **Tomado** | IGPO (+ sucesor IG semántico 2602.00845) |
+| Dual (forward + backward como descomposición pragmático/epistémico) | **Libre** | Ausente en survey 2604.09459 (41 core + 6 enablers) y búsquedas dirigidas 2026-06-12. El propio survey declara el gap en su §4.2: "most current CA methods do not explicitly address this distinction" entre decision errors / information gaps / exploratory actions |
+| PI residual (gating por belief, lado scorer) | **Libre** | Familia hints es lado-student (schedule o minimalidad estática); PI-dropout robótica es random/schedule sobre critic entrenado |
+| Mapa dónde/por qué (por environment) | **Libre** | Gap §4.2 del survey + "CA meets exploration" (§9.2) como frontera adyacente |
+| Análisis de leakage de scores privilegiados (D.1/D.9) | Sigue libre y ahora aplica a *dos* direcciones | Ningún vecino lo hizo a fondo |
+
+Implicancia de posicionamiento: TAMTRL, OPCD, CriticSearch, HCAPO e IGPO
+pasan de "amenazas" a **related work que valida los componentes**. El claim
+del paper ya no es ningún componente: es la descomposición, la dosificación
+y el mapa.
+
+Caveat de vigilancia (riesgo de scoop, pivot §10.5): **TAMTRL, la familia
+hints y OPSD/OPCD no aparecen ni en el survey ni en el repo
+Awesome-Credit-Assignment** → el repo Awesome solo NO alcanza como mecanismo
+de re-check mensual; hace falta búsqueda directa + alertas de citas a IGPO y
+TAMTRL.
