@@ -147,6 +147,18 @@ dicho acá antes de que lo diga un reviewer.
 - La forma final de τ sí se **calibra** acá (§2) pero su validación es en
   training.
 
+## 6b. Harness congelado (2026-06-12)
+
+El scoring está implementado en `tools/figura1_scoring.py` (smoke-tested en
+CPU con Qwen2.5-0.5B; self-test de mecánica incluido). Las **decisiones
+operativas donde este doc era ambiguo** (P4 clasifica contra el goal
+verdadero y puntúa con el rotado; P1' gatea sobre full-golden; one-sided +
+Bonferroni α/3; τ pooled por tipo; `price` excluido del AUC de P5 por
+mismatch de forma canónica "$X.XX"; reconstrucción reducida del template)
+están congeladas y numeradas en `tools/README.md` § `figura1_scoring.py` —
+forman parte de este pre-registro con la misma regla: cambios solo antes
+del primer rollout, en commit explícito.
+
 ## 7. Requisitos previos
 
 1. #17 cerrado (g_i + extractor adaptado al formato por componentes).

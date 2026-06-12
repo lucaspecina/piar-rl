@@ -225,3 +225,4 @@ results/
 
 # Local Claude Code config
 .claude/settings.local.json
+tools/testdata/*_scores.json
