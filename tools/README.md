@@ -37,15 +37,32 @@ python tools/extract_webshop_specs.py \
     --include-all-goals
 ```
 
-**Refs**: #17, decisión C.3 (template), C.5 (spec como primary PI). Plan de
-análisis en [`research/notes/webshop-specs-analysis-plan.md`](../research/notes/webshop-specs-analysis-plan.md).
+**Post-pivot 2026-06**: además de la spec monolítica (brazo A1), el script
+descompone cada goal en **componentes g_i** con wrapper w_i (N.1/N.8, formato
+de [`research/synthesis/pi-webshop.md`](../research/synthesis/pi-webshop.md)
+§2–§5) y serializa el bloque del residual R(t). El output incluye análisis de
+K por goal y longitudes de value por tipo. Smoke-tested con fixture sintético
+(2026-06-12; `uv run --no-project python tools/extract_webshop_specs.py ...`
+funciona sin deps).
 
-Para usar `serialize_spec_for_teacher_prompt()` directamente en el código de
-PIAR (cuando se implemente `compute_piar_step_reward`), importar desde acá:
+**Refs**: #17, decisiones C.3 (template A1), C.5 (spec como primary PI),
+N.1/N.8 (componentes + canonicalización). Plan de análisis en
+[`research/notes/webshop-specs-analysis-plan.md`](../research/notes/webshop-specs-analysis-plan.md).
+
+**Estado del dataset (2026-06-12)**: el Google Drive oficial está con "Quota
+exceeded" — descarga bloqueada también desde esta máquina (además del proxy).
+Mirror en búsqueda; ver comentario en #17.
+
+Para usar las funciones directamente en el código de PIAR (cuando se
+implemente `compute_piar_step_reward` / el belief tracker), importar desde acá:
 
 ```python
-from tools.extract_webshop_specs import serialize_spec_for_teacher_prompt
+from tools.extract_webshop_specs import (
+    decompose_goal_components,
+    serialize_residual_block,
+    serialize_spec_for_teacher_prompt,
+)
 ```
 
-(O copiar la función a `code/istar/piar_step_reward.py` si se quiere autonomía
-de `code/` respecto a `tools/`.)
+(O copiar las funciones a `code/istar/piar_step_reward.py` si se quiere
+autonomía de `code/` respecto a `tools/`.)

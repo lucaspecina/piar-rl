@@ -21,11 +21,13 @@ Decisión C.5 (research/synthesis/design-decisions.md): la spec estructurada es 
 primary privileged context. Este script extrae los campos relevantes y los serializa
 en el formato del prompt teacher.
 
-Decisión C.3: template del prompt teacher estilo OPSD ("Here is a reference solution:
-[y*]. After understanding..."). El formato exacto se valida acá empíricamente
-midiendo la longitud en tokens.
+Post-pivot 2026-06 (N.1/N.8, research/synthesis/pi-webshop.md): además de la spec
+monolítica (C.3, brazo A1 full-golden), el script descompone cada goal en
+componentes fácticos g_i con su wrapper w_i (para el belief b_i del backward) y
+serializa el bloque del residual R(t) (forward residual, brazo A4). Ver
+decompose_goal_components / serialize_residual_block.
 
-Refs: #17, design-decisions.md C.3 / C.5 / D.9, piar-implementation-points.md §3.
+Refs: #17, design-decisions.md C.3 / C.5 / D.9 / N.1 / N.8, pi-webshop.md §2-§5.
 """
 
 from __future__ import annotations
@@ -121,6 +123,89 @@ def extract_goals(
     return goals, skipped
 
 
+def decompose_goal_components(goal: dict) -> list[dict]:
+    """Descompone el goal en componentes fácticos g_i según pi-webshop.md §2 (N.1).
+
+    K = 2 + |attributes| + |goal_options| componentes (g_price se omite si no hay
+    restricción de precio). Cada componente lleva:
+    - type: prod | attr | opt | price (define wrapper y τ por tipo).
+    - wrapper: el prefijo textual w_i para computar el belief b_i (§4).
+    - value: el valor canónico VERBATIM del dataset (lo que se puntúa).
+    - residual_label: la línea que entra al bloque del residual R(t) (§5).
+
+    Invariante 10: todos son hechos del dataset; `asin`/`query` excluidos (§3).
+    Wrappers con canonicalización agresiva (N.8 post-review 2026-06-12):
+    restringen el formato de respuesta para colapsar paráfrasis.
+    """
+    components = []
+
+    name = goal.get("name")
+    if name:
+        components.append({
+            "type": "prod",
+            "wrapper": ("Based on the interaction so far, the exact product the "
+                        "user is looking for is (answer with the exact product "
+                        "title):"),
+            "value": str(name),
+            "residual_label": f"- Target product: {name}",
+        })
+
+    for k, attr in enumerate(goal.get("attributes", []) or [], start=1):
+        components.append({
+            "type": "attr",
+            "wrapper": (f"Based on the interaction so far, required attribute "
+                        f"#{k} of the target product is (answer with the exact "
+                        f"attribute phrase, lowercase):"),
+            "value": str(attr),
+            "residual_label": f"- Required attribute: {attr}",
+        })
+
+    opts = goal.get("goal_options", {}) or {}
+    for key in sorted(opts):
+        components.append({
+            "type": "opt",
+            "wrapper": (f"Based on the interaction so far, the required "
+                        f"{key} option of the target product is (answer with "
+                        f"the exact option value):"),
+            "value": str(opts[key]),
+            "residual_label": f"- Required {key}: {opts[key]}",
+        })
+
+    price = goal.get("price_upper")
+    if price is not None and price < 1_000_000:
+        components.append({
+            "type": "price",
+            "wrapper": ("Based on the interaction so far, the maximum acceptable "
+                        "price for the target product is (answer with the exact "
+                        "amount in dollars):"),
+            "value": f"{price:.2f} dollars",
+            "residual_label": f"- Maximum price: {price:.2f} dollars",
+        })
+
+    return components
+
+
+def serialize_residual_block(components: list[dict], known_mask: list[bool] | None = None) -> str:
+    """Serializa el residual R(t) al prompt del scorer (pi-webshop.md §5).
+
+    known_mask[i] = True si b_i(t−1) ≥ τ (componente ya sabido → fuera del bloque).
+    Orden fijo prod → attr → opt → price independiente de qué entra (el layout no
+    debe filtrar cuánto sabe el student). Si R(t) = ∅ devuelve "" (los dos prompts
+    del forward quedan idénticos → r_fwd = 0 exacto, auto-annealing).
+    """
+    if known_mask is None:
+        known_mask = [False] * len(components)
+    residual = [c for c, known in zip(components, known_mask) if not known]
+    if not residual:
+        return ""
+    order = {"prod": 0, "attr": 1, "opt": 2, "price": 3}
+    residual.sort(key=lambda c: order.get(c["type"], 9))
+    lines = ["Privileged information (for evaluation only — the shopper cannot "
+             "see this):"]
+    lines.extend(c["residual_label"] for c in residual)
+    return "\n".join(lines)
+
+
 def serialize_spec_for_teacher_prompt(goal: dict, include_price: bool = True) -> str:
     """Serializa la spec estructurada en el bloque que se inyecta al prompt del teacher.
 
@@ -203,7 +288,37 @@ def analyze_goals(goals: list[dict]) -> dict:
                      and len(g.get("goal_options", {})) >= 1)
     poor_specs = sum(1 for g in goals if len(g.get("attributes", [])) < 2)
 
+    # Análisis por componente g_i (post-pivot, pi-webshop.md §2):
+    # K por goal + longitud en chars del value por tipo (proxy de |g_i| en tokens,
+    # relevante para la normalización 1/L del belief).
+    k_per_goal = []
+    value_len_by_type: dict[str, list[int]] = {}
+    for g in goals:
+        comps = decompose_goal_components(g)
+        k_per_goal.append(len(comps))
+        for c in comps:
+            value_len_by_type.setdefault(c["type"], []).append(len(c["value"]))
+    components_analysis = {
+        "K_per_goal": {
+            "min": min(k_per_goal),
+            "max": max(k_per_goal),
+            "median": statistics.median(k_per_goal),
+            "mean": round(statistics.mean(k_per_goal), 2),
+            "distribution": dict(sorted(Counter(k_per_goal).items())),
+        },
+        "value_char_length_by_type": {
+            t: {
+                "n": len(lens),
+                "median": statistics.median(lens),
+                "p99": sorted(lens)[int(0.99 * len(lens))] if len(lens) > 100 else max(lens),
+            }
+            for t, lens in sorted(value_len_by_type.items())
+        },
+        "note": "price ausente en extracción standalone (price_upper se sortea en el env por episodio)",
+    }
+
     return {
+        "components_g_i": components_analysis,
         "n_goals": n,
         "n_unique_asins": unique_asins,
         "attributes_per_goal": {
@@ -292,6 +407,8 @@ def main():
             "goal": goals[i],
             "serialized_for_teacher_prompt": serialize_spec_for_teacher_prompt(goals[i]),
             "estimated_token_length": estimate_token_length(serialize_spec_for_teacher_prompt(goals[i])),
+            "components_g_i": decompose_goal_components(goals[i]),
+            "residual_block_full": serialize_residual_block(decompose_goal_components(goals[i])),
         }
         for i in example_indices
     ]
@@ -329,6 +446,7 @@ def main():
     print(f"  Token length del bloque serializado — mediana: {analysis['serialized_token_length_estimate']['median']}, p99: {analysis['serialized_token_length_estimate']['p99']}")
     print(f"  Specs ricas (≥2 attrs + ≥1 opt): {analysis['spec_richness']['rich_specs_pct']}%")
     print(f"  Specs pobres (<2 attrs): {analysis['spec_richness']['poor_specs_pct']}%")
+    print(f"  Componentes g_i por goal (K) — mediana: {analysis['components_g_i']['K_per_goal']['median']}, distribución: {analysis['components_g_i']['K_per_goal']['distribution']}")
 
 
 if __name__ == "__main__":
