@@ -25,7 +25,8 @@ descomposición no aparece acá, no hay método que entrenar.
 |---|---|
 | Modelo | Qwen2.5-7B-Instruct (shakedown previo del pipeline con Qwen2.5-1.5B-Instruct; los números que cuentan son los del 7B) |
 | Environment | WebShop, mismo config que `code/examples/istar_trainer/run_webshop.sh` (max_steps incluido — reconciliar el 10 vs 15 señalado en [`paper-gigpo.md`](../notes/paper-gigpo.md) §8 ANTES de rollear) |
-| Rollouts | ~200 episodios del modelo base, greedy-off (temperature del script de iStar), **congelados a disco antes de computar ningún score** |
+| Rollouts | ~200 episodios del modelo base, **temperatura, N por tarea y set de tareas fijados con seed ANTES de rollear** (default: temperatura del script de iStar; set = sample uniforme seeded del split de training). **Cero filtrado manual de episodios.** Congelados a disco antes de computar ningún score |
+| Outcome | **Score continuo de WebShop** (no éxito binario) — los rollouts del modelo base pueden tener poca varianza binaria |
 | Scorer | El mismo checkpoint base (π_old = θ_base — no hay training, así que el invariante 4 es trivial acá) |
 | PI | Componentes g_i + wrappers de [`pi-webshop.md`](pi-webshop.md) §2–§4 |
 | Seeds | Fijadas y loggeadas en `experiments/E001/manifest.yaml` |
@@ -34,9 +35,11 @@ Las tres lecturas a computar por turno sobre cada trayectoria congelada:
 
 1. **r_fwd full-golden** (pivot §4.3 con R(t) = g completa — versión brazo A1).
 2. **r_bwd** (pivot §4.2): Σ_i [b_i(t) − b_i(t−1)].
-3. **r_fwd residual** (pivot §4.3 con gating τ): para la lectura del canal;
-   τ inicial = mediana de b_i(0) sobre los 200 episodios `[LUCAS: confirmar
-   esta regla de calibración o fijar τ a mano]`.
+3. **r_fwd residual** (pivot §4.3 con gating τ): para la lectura del canal.
+   **τ = percentil empírico por tipo de componente** (no umbral universal —
+   mitiga el mass-splitting de [`pi-webshop.md`](pi-webshop.md) §4.1),
+   **condicionado a que P5 pase**; percentil default p50 `[LUCAS: confirmar
+   regla percentil-por-tipo y el percentil]`.
 
 ## 3. Clasificación de acciones
 
@@ -49,35 +52,79 @@ acción (sin LLM judge):
 | `click-nav` | `click[...]` sobre links de navegación/paginación/producto (ni opción ni buy) |
 | `click-opcion-buy` | `click[...]` sobre una opción del producto o `click[buy now]` |
 
+Sub-clasificaciones para las confirmatorias within-type (igual de
+determinísticas, **reglas congeladas acá, antes de mirar un solo rollout**):
+
+| Sub-clase | Regla |
+|---|---|
+| click **correcto** / **incorrecto** | click de producto: el ASIN del link == `goal['asin']` o no. Click de opción: el valor normalizado (lowercase, `normalize_color`) ∈ valores de `goal['goal_options']` o no |
+| acción **informativa** / **no informativa** | la observación resultante contiene la forma canónica (matching textual case-insensitive) de ≥1 componente g_i que NO había aparecido en observaciones previas del episodio / no agrega ninguno |
+
 ## 4. Predicciones pre-registradas
+
+**v2 (2026-06-12, post-review externo):** las comparaciones *between-type*
+originales (P1/P2 del pivot §8) tienen un confound sintáctico — un `search`
+es texto libre largo, un `click` es formato fijo corto; las medianas pueden
+separarse por construcción del span y no por semántica. Las
+**confirmatorias** pasan a ser contrastes *within-type* (mismo formato, pura
+semántica); las between-type quedan como **descriptivas** (se reportan, no
+gatean).
+
+### 4.1 Confirmatorias (gatean; Mann-Whitney, α = 0.05 con Bonferroni sobre {P1', P2', P3} `[LUCAS: confirmar]`)
 
 | # | Predicción | Criterio cuantitativo | Qué valida |
 |---|---|---|---|
-| P1 | El forward castiga informarse y premia ejecutar | mediana r_fwd(search) < mediana r_fwd(click-opcion-buy), Mann-Whitney p < 0.05 `[LUCAS: confirmar test y α]` | El hindsight bias del forward existe → el backward no es opcional |
-| P2 | El backward premia informarse y es ciego a ejecutar | mediana r_bwd(search) > mediana r_bwd(click-opcion-buy) ≈ 0, mismo test | La direccionalidad epistémica existe |
-| P3 | El belief amortizado trackea valor | Spearman(Σ_t r_bwd, score final del episodio) ρ > 0.3 `[LUCAS: fijar el número final — 0.3 es el propuesto del pivot §8]` | b_i no es ruido; el gating tiene base (N.9 parcial) |
-| P4 | Nada de esto es leakage textual | Con shuffled-golden (g de otro episodio, mismo formato), P1–P3 colapsan: efectos < 50% del tamaño original y/o pierden significancia `[LUCAS: confirmar criterio de colapso]` | D.9 aplicado a ambas direcciones |
+| P1' | El forward distingue semántica dentro del mismo formato | mediana r_fwd(click sobre el producto target, ASIN del goal) > mediana r_fwd(click sobre otro producto); ídem opciones: r_fwd(click de opción ∈ goal_options) > r_fwd(click de opción ∉) | El forward mide corrección de la decisión, no longitud/sintaxis del span |
+| P2' | El backward premia las acciones que revelan información | mediana r_bwd(acciones cuya observación resultante contiene la forma canónica de algún g_i todavía no aparecido) > mediana r_bwd(acciones cuya observación no agrega ningún g_i) — clasificación determinística por matching textual sobre la observación, regla escrita antes de mirar datos | La direccionalidad epistémica existe a igualdad de sintaxis |
+| P3 | El belief amortizado trackea valor | **Spearman parcial** (Σ_t r_bwd vs score continuo final, **controlando longitud de trayectoria**) ρ > 0.3 `[LUCAS: confirmar 0.3]`. **Robustness obligatoria**: la correlación **excluyendo el último turno** mantiene signo y significancia (anti-circularidad: si compraste el item correcto, la página final lo contenía y el belief final es alto por definición) | b_i no es ruido; el gating tiene base (N.9 parcial) |
+| P5 | El belief separa lo sabido de lo no sabido | Para cada tipo de componente: AUC > 0.8 `[LUCAS: confirmar]` separando b_i de componentes **ya aparecidos verbatim (forma canónica) en observaciones del episodio** vs no aparecidos | La premisa del gating. Si falla, el gating por belief se rediseña ANTES de gastar GPU (fallback: gating observacional, `pi-webshop.md` §4.2) |
 
-Métricas secundarias (se loggean, no gatean): distribución de b_i(0) y
-b_i(T) por tipo de componente (τ por tipo, `pi-webshop.md` §4.1);
-cuasi-ortogonalidad de los g_i (correlación entre Δb_i de componentes
-distintos — caveat KnowRL); fracción de turnos con R(t) = ∅ al final de los
-episodios exitosos (¿el auto-annealing llegaría a activarse?).
+### 4.2 Control existencial
 
-## 5. Árbol de decisión (cada rama tiene salida — pivot §8)
+| # | Predicción | Criterio | Qué valida |
+|---|---|---|---|
+| P4 | Nada de esto es leakage textual | Con shuffled-golden (g de otro episodio, mismo formato): para cada confirmatoria, el **efecto shuffled es < 1/3 del efecto real Y no significativo** `[LUCAS: confirmar criterio]` | D.9 aplicado a ambas direcciones |
 
-- **P1–P3 pasan** → Figura 1 del paper + luz verde a la implementación
-  (fase 5 del roadmap propuesto). P4 debe pasar también; si P4 falla, parar
-  todo: el método mide afinidad textual (resultado negativo limpio, D.9).
-- **P3 falla** → el belief amortizado no trackea valor. NO entrenar. Abrir
-  la investigación de calibración N.9 completa (correlacionar b_i contra
-  values Monte Carlo estilo Math-Shepherd en subset chico) antes de cualquier
-  otra cosa.
-- **P1 o P2 fallan** → la descomposición no existe en WebShop. Dos lecturas
-  posibles a desambiguar con los logs por tipo de acción: (a) WebShop tiene
-  poca información oculta (consistente con el mapa dónde/por qué — probar
+### 4.3 Descriptivas y exploratorias (se reportan, no gatean)
+
+- P1/P2 between-type originales del pivot §8 (search vs click-opción/buy).
+- Distribución de b_i(0) y b_i(T) por tipo de componente (calibra el
+  percentil de τ).
+- Cuasi-ortogonalidad de los g_i (correlación entre Δb_i de componentes
+  distintos — caveat "pruning interaction paradox" de KnowRL).
+- Fracción de turnos con R(t) = ∅ al final de episodios de score alto (¿el
+  auto-annealing llegaría a activarse?).
+
+### 4.4 Alcance (honestidad pre-registrada)
+
+**La Figura 1 valida que las señales discriminan sobre trayectorias
+congeladas; NO valida que mejoren el RL.** Es condición necesaria, no
+suficiente — el efecto en training se decide en los brazos A1–A4. Queda
+dicho acá antes de que lo diga un reviewer.
+
+## 5. Árbol de decisión (cada rama tiene salida — pivot §8, v2)
+
+- **P1', P2', P3, P5 pasan y P4 colapsa como debe** → Figura 1 del paper +
+  luz verde a la implementación (fase 5 del roadmap propuesto).
+- **P4 falla** (los efectos sobreviven al shuffle) → parar todo: el método
+  mide afinidad textual condicionada a la golden, no causalidad. Resultado
+  negativo limpio (D.9).
+- **P5 falla** → la premisa del gating por belief no se sostiene (el nivel
+  absoluto de b_i no separa sabido/no-sabido — mass-splitting u otra causa).
+  NO se gasta GPU en el residual por belief: se rediseña el gate. Fallback
+  pre-registrado y determinístico: **gating observacional**
+  ([`pi-webshop.md`](pi-webshop.md) §4.2) — el componente sale del residual
+  cuando su forma canónica apareció en una observación. El dual (A3) sigue
+  vivo independiente de esto.
+- **P3 falla** (o pasa solo gracias al último turno) → el belief amortizado
+  no trackea valor. NO entrenar. Abrir la investigación de calibración N.9
+  completa (correlacionar b_i contra values Monte Carlo estilo Math-Shepherd
+  en subset chico) antes de cualquier otra cosa.
+- **P1' o P2' fallan** → la descomposición no existe en WebShop a nivel
+  semántico. Dos lecturas a desambiguar con los logs: (a) WebShop tiene poca
+  información oculta (consistente con el mapa dónde/por qué — probar
   ALFWorld antes de descartar), (b) los wrappers/g_i están mal diseñados
-  (revisar §4.1 de pi-webshop.md). Ninguna habilita implementación todavía.
+  (revisar pi-webshop.md §4.1). Ninguna habilita implementación todavía.
 
 ## 6. Qué NO se decide con la Figura 1
 

@@ -101,20 +101,53 @@ a la suma; solo el valor.
 h_t — con prefix caching son K continuaciones cortas sobre un solo prefill.
 Costo marginal ≈ cero frente al rollout.
 
-### 4.1 Caveat conocido: mass-splitting entre atributos intercambiables
+### 4.1 Caveat conocido: mass-splitting entre formas intercambiables
 
-Para `g_attr_k` el wrapper indexado (`#1`, `#2`) es determinístico pero el
-modelo no tiene forma de saber qué atributo es "el #1" — la masa de
-probabilidad se reparte entre los atributos válidos y los b_attr quedan
-deprimidos de forma pareja. Esto **no rompe el método** (el gating compara
-b_i contra τ y el backward usa Δb_i, ambos relativos), pero sí puede requerir
-**τ por tipo de componente** en vez de un τ global. Decisión data-driven en
-la Figura 1: loggear distribuciones de b_i por tipo y elegir.
+Dos fuentes de mass-splitting, con efectos distintos sobre los dos usos del
+belief (distinción del review externo 2026-06-12):
 
-Variante ablation (si el indexado resulta ruidoso): wrapper conjunto
-"the required attributes of the target product are:" con los atributos en
-orden canónico como un solo componente `g_attrs` (K más chico, curriculum más
-grueso).
+- **El backward es robusto**: usa deltas — si la masa se reparte de forma
+  estable entre paráfrasis/órdenes válidos durante el episodio, el offset se
+  cancela en b_i(t) − b_i(t−1).
+- **El gate es el que sufre**: compara el *nivel absoluto* contra τ. Un
+  componente que el student ya sabe pero puede expresar de cinco formas queda
+  ~log(5) por debajo de donde debería; el umbral no se cruza nunca y el
+  scorer repite lo que el student ya sabe — muere el auto-annealing.
+
+Mitigaciones, en orden de preferencia:
+
+1. **Canonicalización agresiva vía wrapper**: restringir el formato de la
+   respuesta en el propio wrapper para colapsar las paráfrasis — ej.
+   `"Answer with the exact attribute phrase, lowercase: ..."` /
+   `"Answer with the exact product title: ..."`. Los valores de WebShop ya
+   son frases cortas del dataset; el wrapper restrictivo reduce el espacio de
+   formas válidas hacia la canónica.
+2. **τ por percentil empírico por tipo de componente** (no umbral universal):
+   calibrado con las distribuciones de b_i de la Figura 1.
+3. **Check pre-registrado P5** (ver [`figura1-prereg.md`](figura1-prereg.md)
+   §4.1): AUC > 0.8 separando b_i de componentes ya aparecidos verbatim en
+   observaciones vs no aparecidos. Si P5 falla, el gating por belief se
+   rediseña antes de gastar GPU → §4.2.
+
+Para `g_attr_k` en particular, el wrapper indexado (`#1`, `#2`) tiene
+mass-splitting adicional entre atributos (el modelo no sabe cuál es "el #1").
+Variante ablation: wrapper conjunto "the required attributes of the target
+product are:" con orden canónico como un solo componente `g_attrs` (K más
+chico, curriculum más grueso).
+
+### 4.2 Fallback determinístico: gating observacional
+
+Si P5 falla, el residual se gatea **sin belief**: el componente g_i sale de
+R(t) cuando su **forma canónica apareció en alguna observación del episodio**
+(matching textual determinístico, mismo criterio que la sub-clasificación
+"informativa" del pre-registro). Menos elegante — no usa el belief del
+student, mide exposición y no comprensión — pero cumple el espíritu del
+profesor-que-no-repite, es 100% reproducible, y es **legítimo como ablation
+del gating aunque P5 pase** (¿el belief agrega algo sobre la exposición
+observacional?). El backward no se toca en este fallback (es robusto por
+§4.1); lo único que cambia es la regla de R(t). Cumple el invariante 10
+propuesto: la regla depende solo de (dataset, estado del simulador), sin
+juicios de utilidad.
 
 ## 5. Serialización del residual R(t) al prompt del scorer
 
