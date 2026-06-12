@@ -162,8 +162,11 @@ Workflow operativo completo en `.claude/skills/tracking/`:
 
 | # | Epic | Status | Sub-issues | Notas |
 |---|------|--------|------------|-------|
-| [#19](https://github.com/lucaspecina/piar-rl/issues/19) | Pivot 2026-06 — reward bidireccional + PI residual | 🟡 In Progress | #20 ✅, #21 ✅, #22 (blocked por aprobación de Lucas), #23 | Fuente de verdad: [`research/synthesis/pivot-2026-06.md`](research/synthesis/pivot-2026-06.md). |
+| ~~[#19](https://github.com/lucaspecina/piar-rl/issues/19)~~ | ~~Pivot 2026-06 — reward bidireccional + PI residual~~ | ✅ Done (2026-06-12) | #20, #21, #22, #23 todos cerrados | PROJECT.md aplicado (`acb799f`) + pre-registro Figura 1 congelado. Restos del pivot viven en #17 / #15 / #16. |
 | ~~[#2](https://github.com/lucaspecina/piar-rl/issues/2)~~ | ~~Research — síntesis de papers vecinos~~ | ✅ Done (2026-05-11) | #3, #4, #5, #6, #7, #8, #9, #10 todos cerrados | Cierre del epic: ver `research/synthesis/papers-cross-mapping.md` + `design-decisions.md`. |
+
+> **Estado al 2026-06-12**: sin epics activos. Trabajo vivo: #17 (g_i, In
+> Progress), #15 (leakage, fase 6), #16 (baselines, blocked por Azure ML).
 
 > Esta tabla se mantiene sincronizada con el Project v2. Si se crea/cierra un
 > epic o cambia el criterio: actualizar acá en el mismo commit.
