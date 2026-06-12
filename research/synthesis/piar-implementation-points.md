@@ -544,3 +544,140 @@ Actualizar antes de arrancar implementación:
 2. **`design-decisions.md` A.2** — alinear LOC estimate.
 3. **Issue #16** — agregar criterio de cierre: además de replicar baseline iStar, validar que `update=none` con el bypass del RM worker no rompa el smoke run.
 4. **Nuevo issue D.10 (candidato)** — token-flow analysis como prerequisito de Apuesta A. Cierra una pregunta científica antes de gastar GPU-días.
+
+---
+
+## Sección 7 · Adendum post-pivot 2026-06 — backward + residual
+
+> **Contexto:** las secciones 1-6 mapean el **forward viejo** (golden completa en el prompt del scorer) y son histórico válido — el mecanismo de inyección, la Opción B de §2.2 (actor para todos los forward passes, invariante 4) y el contrato de `rm_scores` siguen vigentes. El pivot 2026-06 ([`pivot-2026-06.md`](pivot-2026-06.md) §4) agrega el **backward** (belief tracker por componente, §4.2), convierte el forward en **residual gateado** (§4.3) y los combina (§4.4). El roadmap de PROJECT.md (fase 5) exige re-estimar acá: *"el estimate ~150 LOC era para el forward solo — el backward + gating agregan superficie"*.
+>
+> Todo lo de abajo está verificado contra el código real de `code/` (refs `archivo:línea` releídas el 2026-06-12). Los supuestos no verificables sin el dataset/GPU llevan ⚠️ explícito.
+>
+> **Refs de diseño:** pivot §4.1-§4.4 · [`pi-webshop.md`](pi-webshop.md) (componentes g_i, wrappers, §4.2 gating observacional, §5 serialización) · [`design-decisions.md`](design-decisions.md) N.1-N.13 · [`figura1-prereg.md`](figura1-prereg.md) (P1-P5).
+
+### 7.1 Mapeo del backward (belief tracker)
+
+#### 7.1.a Dónde vive el historial por turno — y la sorpresa de la ventana
+
+El batch que llega al hook del reward tiene **una fila por turno** (cada step se appendea en `rollout_loop.py:368-369` y `gather_rollout_data` aplana, `rollout_loop.py:200-261`). El prompt de cada fila lo arma `WebshopEnvironmentManager.build_text_obs` (`env_manager.py:392-439`) con `WEBSHOP_TEMPLATE` (`prompts/webshop.py:16-29`). Tres hechos del código que el pivot §4.2 no anticipaba:
+
+1. **El historial del prompt es una ventana de 2 turnos, no el episodio completo.** `history_length: int = 2` es default de la firma (`env_manager.py:392`) y el callsite del `step` no lo overridea (`env_manager.py:337`); no hay knob de config para WebShop. Encima hay un fallback: si el texto supera 13000 chars, cae a `WEBSHOP_TEMPLATE_NO_HIS` **sin historial** (`env_manager.py:429-435`). El historial completo existe solo en `self.buffers[i]` (`env_manager.py:388-390`), que nunca se propaga al batch. **Implicación:** el `h_t` = "historial hasta o_t inclusive" de la formalización es, operativamente, *task + últimos 2 pares (obs, acción) + obs actual*. No cabe otra cosa: reconstruir el historial completo de un episodio WebShop (~10 páginas de ~1-3k tokens c/u ⚠️ estimado, dataset no descargado) revienta `max_prompt_length=4096` (`run_webshop.sh:25`). Ver riesgo §7.5.1.
+2. **El historial excluye los `<think>` por construcción.** El buffer guarda la acción ya parseada por `projection_f` (`env_manager.py:328,333`), no la response completa. La decisión abierta N.6 (¿thoughts en el historial del backward?) tiene default forzado por el código: **solo acciones+observaciones** — que era la *ablation* propuesta, no el default del pivot. Para correr la variante con-thoughts habría que tocar el env manager, no el reward.
+3. **Alineación turnos↔beliefs sin queries extra de diseño:** b_i(t−1) (el belief *antes* de la acción a_t, el que gatea R(t), N.4) se computa sobre el prompt de la **misma fila t**. b_i(t) (después de la acción) se computa sobre el prompt de la **fila t+1**, que contiene o_t como "current observation". b_i(0) sale del prompt de la fila 1 (template `NO_HIS`, `env_manager.py:316`). El conjunto total de queries por episodio es K×(T+1) y cada prompt se usa dos veces (como "después" del turno anterior y "antes" del siguiente) — la nota de causalidad del pivot §4.3 se implementa gratis.
+
+**Excepción que requiere plumbing: b_i(T) no existe en el batch.** La observación posterior a la última acción muere en la variable local `obs` del loop (`rollout_loop.py:376` — el último `next_obs` nunca se vuelve prompt) y `total_infos` no guarda el texto. Dos salidas: (i) capturar `obs['text'][i]` del último step activo como `non_tensor_batch['final_obs_text']` (~5-8 LOC en `rollout_loop.py`), o (ii) definir b_i(T) sobre prompt_T + acción_T sin obs final — defendible en WebShop (la obs post-`buy` es la página de confirmación, informativamente vacía) pero rompe la simetría de la definición. Default propuesto: (i).
+
+**Bookkeeping de identidad de turno — hoy no se puede.** Ninguna fila lleva índice de turno (`preprocess_single_sample` guarda `index` = env idx, `rollout_loop.py:148`; `uid`/`traj_uid` se agregan en `rollout_loop.py:336-337`). Y el orden de filas NO es confiable aguas abajo: `trainer.balance_batch: True` por default (`ppo_trainer.yaml:279`) reordena el batch antes del RM call (`ray_trainer.py:1164-1165`, con warning explícito en el comentario), y `adjust_batch` en modo `copy` **duplica filas aleatorias** para divisibilidad (`utils.py:99-104`, llamado en `ray_trainer.py:1158`). Reconstruir la secuencia de turnos exige: `non_tensor_batch['step_idx']` nuevo (~2-3 LOC en el rollout loop) + agrupar por `(traj_uid, step_idx)` con dedup de copias (el dedup por `(uid, traj_uid)` que ya hace `core_istar.py:130-133` sugiere que el codebase convive con estos duplicados).
+
+#### 7.1.b ¿Sirve `compute_log_prob` para puntuar los g_i? Sí — pero sin prefix caching
+
+`actor_rollout_wg.compute_log_prob` (`fsdp_workers.py:665-705`) despacha a `dp_actor.compute_log_prob` (`dp_actor.py:252-320`): forward del **actor FSDP** (HF + flash-attn varlen con `use_remove_padding=True`, `dp_actor.py:96-145`), que devuelve logprobs de los últimos `responses.size(-1)` tokens dado `input_ids` = prompt+response (`dp_actor.py:81,107`). Para un belief query alcanza con armar un DataProto sintético: `input_ids` = [prompt de la fila, left-pad intacto] + [wrapper w_i + valor g_i], `responses` = los tokens nuevos, attention_mask y position_ids recomputados (`compute_position_id_with_mask` ya importado en `rollout_loop.py:17`). El span del valor se extrae del output y se promedia → b_i(t). Mecánicamente **sí sirve**, con tres verificaciones a favor:
+
+- `temperature` = `rollout.temperature` = **1.0** default (`ppo_trainer.yaml:104`, aplicada en `dp_actor.py:153`) → los logprobs no quedan temperature-scaled. Si algún run cambia la temperatura, los b escalan 1/τ_temp — el gate por percentil es invariante a escala monótona, pero documentarlo en el manifest.
+- micro-batching listo: `log_prob_micro_batch_size_per_gpu=16` (`run_webshop.sh:39`); `use_dynamic_bsz` default off (`ppo_trainer.yaml:97`) — activarlo empaqueta mejor queries de longitud dispar, optimización opcional.
+- el patrón "old_log_probs como denominador" ya existe en iStar: `dp_rm.py:158` usa `micro_batch["old_log_probs"]` cuando `ref_path=null`.
+
+**El punto crítico de costo: este path NO tiene prefix caching.** El caching existe solo en el motor de rollout — `enable_prefix_caching=True` está hardcodeado en `vllm_rollout_spmd.py:167` — pero el worker solo expone `generate_sequences` (`fsdp_workers.py:636-662`); no hay path de *scoring* vía vLLM. En el path FSDP cada una de las K queries del turno t **recomputa el prefijo h_t completo** (~2k tokens ⚠️) para puntuar ~10-40 tokens nuevos. El "costo marginal ≈ cero frente al rollout" de [`pi-webshop.md`](pi-webshop.md) §4 asumía prefix caching: **con el código tal cual está, ese supuesto es falso** — el factor K no se amortiza. Cuantificación en §7.4. (Concatenar los K pares wrapper+valor en una sola secuencia NO es equivalente — v_1 contamina el contexto de v_2 — descartado.) La optimización real, si hace falta: método `score_sequences` en el rollout worker vía vLLM `SamplingParams(prompt_logprobs=..., max_tokens=1)` aprovechando el APC ya activo (~40-80 LOC + manejo del sharding manager + el overhead de que vLLM serializa los logprobs del prompt *entero*). No es MVP; el path FSDP alcanza para shakedown y Figura 1.
+
+#### 7.1.c Dónde guardar los K beliefs por turno
+
+`non_tensor_batch` (object arrays por fila) es el lugar correcto — es donde ya viven `uid`, `traj_uid`, `rewards`, `is_action_valid` (`rollout_loop.py:336-362`). K varía por episodio (K = 2+|attrs|+|opts|, [`pi-webshop.md`](pi-webshop.md) §2) → vectores de longitud variable, imposible tensorizar sin padding artificial. Por fila: `beliefs_pre` (K floats, = b(t−1)), `beliefs_post` (K floats, = b(t)), `residual_mask` (K bools), y por trayectoria (cacheado por `traj_uid`, mismo patrón que el `golden_dict` de §3.4): la lista de componentes con sus token-ids canónicos. Nada de esto entra a `data.batch` (tensores) → cero riesgo de romper el contrato de `core_istar.py`, que solo lee `rm_scores`/`token_level_rewards`/`response_mask`/`uid`/`traj_uid` (`core_istar.py:33-37`).
+
+#### 7.1.d Construcción de r_bwd y entrega en formato iStar
+
+Todo en el driver, dentro del reemplazo del dispatch RM (`ray_trainer.py:1242-1268`, mismo callsite que §2.2.4):
+
+1. Reagrupar filas por `(traj_uid, step_idx)` (dedup de copias).
+2. **Un solo batch sintético** con las K×(T+1) queries de todos los episodios → **una** llamada a `compute_log_prob`. No hay secuencialidad por turnos: la trayectoria está congelada, h_t no depende de nada que computemos.
+3. b_i(t) = media de logprobs del span del valor (normalización 1/|g_i|, [`pi-webshop.md`](pi-webshop.md) §4); r_bwd(t) = Σ_i [b_i(t) − b_i(t−1)] — numpy puro.
+4. z-norm por grupo `uid` **separada** para r_fwd y r_bwd (N.7), combinación r_t = ẑ(r_fwd) + λ·ẑ(r_bwd).
+5. Escribir el tensor `(bs, response_length)` todo-ceros con r_t en la posición `max_positions[i]−1` — la convención exacta de `dp_rm.py:199-204` que `core_istar.py` consume vía `step_rewards.sum(dim=-1)` (`core_istar.py:122`). Filas duplicadas por `adjust_batch` reciben el mismo escalar.
+
+**Caveat de doble normalización (cruza con N.7):** `core_istar.step_rloo_reward` aplica *encima* su leave-one-out por `uid` (`core_istar.py:143-147`) — y su baseline se construye con el **primer step visto de cada trayectoria** (el dedup `(uid, traj_uid)` de `core_istar.py:129-133` mete un solo score por trayectoria a `id2score`; herencia de PRIME single-turn donde fila=trayectoria, no bug nuestro a arreglar). La ẑ del pivot §4.4 la hacemos nosotros en el paso 4; lo que iStar haga después es parte del brazo B1. Para los brazos A0-A4 (GRPO/RLOO sin iStar) el estimator se cablea en fase 3 y este caveat se re-decide ahí.
+
+### 7.2 Mapeo del residual/gating
+
+**Post-rollout, no inline — y no hace falta un pass secuencial por turnos.** La dependencia "R(t) necesita b_i(t−1)" sugiere secuencialidad, pero como la PI nunca toca el rollout (invariante 11/N.3: el student rollea a ciegas y la trayectoria queda congelada), *todos* los beliefs se computan de una vez (§7.1.d paso 2) y recién después el gating define los R(t) de todas las filas. Orden dentro del callsite del RM:
+
+| # | Paso | Naturaleza | Soporte en el código |
+|---|---|---|---|
+| 1 | Belief pass (todas las queries) | 1 llamada batcheada a `compute_log_prob` | `fsdp_workers.py:665-705` |
+| 2 | Gating: R(t) = {i : b_i(t−1) < τ_tipo} | Python puro sobre los b ya computados; τ = percentil por tipo (N.4), calibrado offline en Figura 1 y cargado por config | — |
+| 3 | Serializar R(t) + inyectar al prompt de cada fila | `serialize_residual_block(components, known_mask)` **ya existe** — `tools/extract_webshop_specs.py:188-206`, con `decompose_goal_components` en `:126-186`. Vive en `tools/` del repo raíz: hay que vendorear/importar esas ~80 LOC al módulo PIAR en `code/` (no cuentan como LOC nuevas, sí como adapter) | decode del prompt (`batch.batch['prompts']` existe — lo usa `ray_trainer.py:217`) → insertar bloque al inicio del user message → re-encode → re-pad |
+| 4 | Teacher pass del forward | 1 llamada batcheada a `compute_log_prob` con los prompts inyectados | ídem §2.2.3 |
+| 5 | Denominador del forward | **Gratis**: `old_log_probs` ya está en el batch — `ray_trainer.py:1182` lo computa y `:1190` lo une *antes* del RM call (`:1242`) | el forward residual cuesta **un** forward extra, no dos |
+| 6 | r_fwd por fila, auto-annealing | si R(t)=∅ → saltear la fila en el paso 4 y fijar r_fwd(t)=0 exacto (los dos prompts serían idénticos) — además ahorra cómputo a medida que el student aprende | pivot §4.3 |
+
+El batch post-rollout **sí tiene la estructura por turnos necesaria**: es la misma segmentación por acciones que iStar usa para su step reward (secciones 1.3-1.4), una fila = un turno con su prompt y su response. Lo único que falta es la identidad de turno (`step_idx`, §7.1.a) y los componentes g_i por episodio (plumbing del goal dict, §3.1/§6.3 — sin cambios: el getter `get_current_goal` sigue siendo el mismo; la descomposición en g_i se hace en el driver con `decompose_goal_components`).
+
+El **gating observacional** (fallback determinístico si P5 falla, [`pi-webshop.md`](pi-webshop.md) §4.2) no necesita beliefs: matching textual de la forma canónica contra las observaciones del episodio, que están disponibles en los prompts decodificables de cada fila o en `anchor_obs` (la obs cruda sin template que `preprocess_single_sample` ya guarda, `rollout_loop.py:147`). ~10-15 LOC, cero forward passes — corre como ablation aunque P5 pase.
+
+### 7.3 Re-estimación de LOC (honesta)
+
+La base forward full-golden de §5.1/§6.4 (142-208, central ~150) **se mantiene como está** — todo ese plumbing (bypass RM worker, `compute_piar_step_reward`, goal injection, callsite) es prerequisito también del diseño nuevo. Lo nuevo:
+
+| Pieza nueva | Qué incluye | LOC est. |
+|---|---|---|
+| Delta del forward residual | Bloque por-turno con `known_mask` en vez de golden fija por episodio; adapter/vendoreo de `serialize_residual_block` + `decompose_goal_components` desde `tools/extract_webshop_specs.py`; skip de filas con R=∅ | 20-35 |
+| Belief tracker | Constructor de queries sintéticas (despad → concat wrapper+valor → re-pad → position_ids → `responses`), 1 llamada a `compute_log_prob`, extracción del span del valor, bookkeeping (traj_uid×step_idx, dedup, pre/post, obs final) | 100-145 |
+| Hooks en `rollout_loop.py` | `step_idx` (~2-3) + captura de obs final (~5-8) + texto de acción parseada para logging por tipo (~3-5) | 10-16 |
+| Gating | Umbral percentil-por-tipo desde config + máscara R(t); fallback observacional (matching determinístico) | 25-40 |
+| Normalización + combinación | z-norm por grupo `uid` separada para los dos scores, λ, escritura del tensor `rm_scores` formato `dp_rm.py:199-204` | 25-40 |
+| Logging por componente y tipo de acción | Por turno: K beliefs, R(t), r_fwd, r_bwd, tipo {search/click-nav/click-buy} → jsonl/parquet en `experiments/ENNN/`. Lo exigen Figura 1, D.1/D.9 (ahora bidireccional) y N.9 desde día 1 — no es opcional | 30-50 |
+| Config plumbing | `algorithm.piar.{tau_percentiles, lambda, gating_mode, norm_mode, shuffle_golden}` en hydra | 10-15 |
+| **Subtotal nuevo** | | **220-341** |
+| **Base forward (§5.1 revisada)** | | **142-208** |
+| **TOTAL** | | **~360-550 · estimación central ~430** |
+
+Supuestos explícitos del estimate: (i) los wrappers y el formato canónico de [`pi-webshop.md`](pi-webshop.md) §4-§5 no cambian tras la Figura 1; (ii) no se implementa el path de scoring vía vLLM (sumaría 40-80); (iii) el action-span masking de §6.5 (si la diagnóstica lo exige) sigue aparte (+15-25); (iv) no incluye tests unitarios del tokenizado frontera (recomendados, ~30-50 más).
+
+### 7.4 Costo computacional estimado
+
+Con la config real de `run_webshop.sh`: N=8 (`group_size`, `:10/:70`), T≤10 (`env.max_steps=10`, `:69`), batch = 16 tareas → **128 episodios/iteración** (~770-1280 filas-turno), K mediana ~5-6 ⚠️ (extractor sin correr, [`pi-webshop.md`](pi-webshop.md) §2), prompt por fila ~2k tokens ⚠️ (techo ~3.2k por el guard de 13000 chars ≈ 4 chars/token, `env_manager.py:429`).
+
+| Pass | Volumen por iteración | Token-forwards |
+|---|---|---|
+| `old_log_prob` existente (`ray_trainer.py:1182`) | ~770-1280 filas × ~2.2k tok | ~1.7-2.8M |
+| **Belief pass nuevo** | K×(T+1)×128 ≈ 5.5×11×128 ≈ **7.7k queries** × ~2k tok | **~10-15.5M** |
+| Teacher pass del forward residual | ≤1 query/fila × ~2.1k tok (menos con auto-annealing: filas R=∅ se saltean) | ~1.7-2.8M |
+
+Lectura: **el belief pass cuesta ≈ K veces el pass de `old_log_probs`** — el lado-reward del step pasa de 1× a ~(K+2)× ≈ 7× ese pass. En wall-clock (2×H100 NVL, 7B bf16, prefill ~25-50k tok/s/GPU ⚠️ número ingenieril): ~2-5 min extra por iteración, **del mismo orden que el rollout completo** (~130-320k tokens de decode autoregresivo + prefills, ~1-3 min con vLLM). Estimado: **+30-80% del wall-clock del training step**. Lejos del "costo marginal ≈ cero" pre-pivot, pero viable: no es rollouts extra ni un modelo extra, y escala linealmente con K (el wrapper conjunto `g_attrs` de [`pi-webshop.md`](pi-webshop.md) §4.1 lo reduce a K≈3 si hace falta). Para el shakedown con 1.5B todo se encoge ~4-5×.
+
+`compute_log_prob` batchea esto razonablemente (micro-batch 16, remove_padding → costo por tokens reales), pero **no agrupa por prefijo compartido** — las K queries del turno t repagan el prefijo K veces (§7.1.b). Si el belief pass domina en la práctica, la palanca correcta es el scoring vía vLLM con el APC ya activo (`vllm_rollout_spmd.py:167`), que amortiza el factor K a ~1× + continuaciones; con el caveat de consistencia: b(t) y b(t−1) deben salir **del mismo motor** (mezclar vLLM para beliefs y FSDP para r_fwd es aceptable — son canales distintos — pero nunca mezclar motores dentro del delta del backward).
+
+> **Actualización mismo día (2026-06-12, post-extracción real — commit `3f03cdf`):**
+> los ⚠️ de K quedaron resueltos: el extractor corrió sobre los 12,087 goals
+> reales y dio **K mediana 2 sin g_prod/g_price → K efectivo ≈ 4** en
+> runtime (no 5.5-6 como asume la tabla de §7.4). El belief pass baja
+> proporcionalmente: ~5.6k queries ≈ **~7-11M token-forwards** por iteración
+> (~0.7× de lo tabulado) — el orden de magnitud y el veredicto no cambian
+> (sigue ≈ K× el pass de old_log_probs, lejos de "≈ cero"). Bonus: con
+> mediana 1 attr/goal, el wrapper conjunto `g_attrs` como palanca de
+> reducción de K pierde relevancia (ya casi no hay qué juntar). Ver
+> [`pi-webshop.md`](pi-webshop.md) §8.
+
+### 7.5 Riesgos de implementación nuevos (del código real)
+
+1. **Ventana de historial = 2 redefine el backward** (`env_manager.py:392,429-435`). El belief es sobre una ventana deslizante, no sobre el episodio: cuando una observación informativa sale de la ventana, b_i puede *caer* sin que el student "olvide" nada → r_bwd negativo espurio, y el telescoping Σr_bwd = b(T)−b(0) queda definido sobre ventanas, no sobre información acumulada. La garantía PBRS sobrevive (Φ es función del prompt-estado, que es lo que la política realmente ve — coherente con que π_old condiciona en lo mismo), pero la *lectura* "información total ganada en el episodio" del pivot §4.2 se debilita. Opciones: aceptar y documentar (default propuesto: el belief mide el estado epistémico de la política, no del episodio); subir `history_length` (costo cuadrático de atención + guard de chars); reconstruir h_t completo desde los buffers (no cabe en 4096). **Candidata a decisión N.14 — la Figura 1 debe loggear cuántas veces cae b_i por salida-de-ventana vs por navegación real.**
+2. **b_i(T) requiere capturar la obs final** (`rollout_loop.py:376` la pierde) — sin eso, el r_bwd del último turno queda truncado o redefinido (§7.1.a).
+3. **Identidad de turno frágil**: sin `step_idx`, con `balance_batch=True` reordenando (`ppo_trainer.yaml:279`, `ray_trainer.py:1164`) y `adjust_batch` duplicando filas (`utils.py:99-104`), cualquier reconstrucción por orden de fila es un bug latente. El fix es barato (§7.1.a) pero tiene que entrar *antes* del primer smoke run, no después.
+4. **Chat template: el wrapper va como continuación del assistant (prefill), y eso tiene un costo semántico.** El prompt de cada fila termina en `<|im_start|>assistant\n` (`apply_chat_template(..., add_generation_prompt=True)`, `rollout_loop.py:86-90`) después de un template que *instruye* a producir `<think>...</think><action>...</action>` (`prompts/webshop.py:12-13,27-28`). Concatenar el wrapper ahí es lo barato a nivel tokens (sin decode/re-encode), pero puntúa g_i en un contexto que pide otra cosa — puede deprimir o distorsionar el nivel absoluto de b_i (otro golpe al gate, que compara niveles absolutos; el backward, que usa deltas, es más robusto — misma asimetría que el mass-splitting de [`pi-webshop.md`](pi-webshop.md) §4.1). Alternativa: reemplazar el bloque de instrucciones ReAct por la pregunta del wrapper como user message (decode → cirugía de texto → re-encode; más LOC, dos variantes a validar). **La Figura 1 (P5/AUC) arbitra cuál de las dos formas separa mejor sabido/no-sabido — pre-registrar ambas.** ⚠️ El string exacto del template de Qwen2.5 no está vendoreado (viene del tokenizer HF); verificar en el primer run.
+5. **Tokenización en la frontera wrapper→valor**: |g_i| y el span a promediar deben definirse sobre la tokenización *en contexto* (tokenizar prefijo+valor junto y tomar offset), no sobre el valor tokenizado aislado — los BPE de Qwen fusionan el espacio inicial al primer token del valor. Es el mismo patrón frontera prompt/response con el que verl ya convive, pero acá el denominador 1/|g_i| amplifica cualquier off-by-one. Test unitario obligatorio.
+6. **Límites de longitud**: queries belief = prompt (≤4096) + ~25-50 tokens → caben en el budget actual (4096+512). El teacher residual suma ~40-100 tokens de bloque a prompts que pueden estar ya al límite: el batch sintético se paddea internamente a la longitud que haga falta (no pasa por `tokenize_and_postprocess_data` con `truncation='error'`), así que es solo VRAM — pero si un prompt+bloque+response supera `log_prob_max_token_len_per_gpu` con dynamic bsz activado, se parte solo; con micro-batch fijo, vigilar OOM en el primer smoke.
+7. **Doble normalización con iStar** (§7.1.d): nuestra ẑ por grupo + el RLOO de `core_istar` encima, cuyo baseline usa el primer-step-por-trayectoria (`core_istar.py:129-133`). No es incorrecto — es el brazo B1 tal como existe — pero la ablation "backward sin normalización" que pide N.7 (caveat PBRS) tiene que poder apagar *nuestra* ẑ sin tocar la de iStar.
+8. **Lo que NO cambia**: `core_istar.py` sigue intocable; el RM worker sigue bypaseado (Opción B de §6.2, único camino válido); el rollout student sigue ciego a la PI (los hooks nuevos en `rollout_loop.py` solo *leen* — step_idx, obs final, action text — no inyectan nada).
+
+### 7.6 Tabla resumen y veredicto
+
+| Bloque | LOC | Forward passes extra por iteración |
+|---|---|---|
+| Forward full-golden (base §5.1, prerequisito) | 142-208 | 1× pass tipo old_log_prob (teacher) |
+| Forward → residual (delta) | 20-35 | igual o menos (skip R=∅) |
+| Belief tracker (backward) | 110-161 | ~K× pass tipo old_log_prob (~10-15M tok ⚠️) |
+| Gating (duro + fallback observacional) | 25-40 | 0 |
+| Normalización + combinación λ | 25-40 | 0 |
+| Logging componente/tipo (Figura 1, D.1/D.9, N.9) | 30-50 | 0 |
+| Config | 10-15 | 0 |
+| **Total** | **~360-550 (central ~430)** | **~+30-80% wall-clock del step ⚠️** |
+
+**Veredicto en una línea:** sigue siendo quirúrgico en el sentido que importa — un solo hook (`ray_trainer.py:1242-1268`), contrato de `rm_scores` intacto, `core_istar.py` y el rollout sin tocar, cero modelos ni rollouts extra — pero ya no es "reemplazo de inputs de ~150 LOC": es un **módulo de reward nuevo de ~430 LOC con un costo de cómputo comparable al rollout**, y la promesa de "costo marginal ≈ cero" del belief debe retirarse de los docs (el prefix caching que la justificaba no existe en el path de scoring).
