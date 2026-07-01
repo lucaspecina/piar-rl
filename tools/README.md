@@ -166,3 +166,32 @@ wall-clock real lo justifica).
 
 **Refs**: #23 (prereg), #17 (g_i), `pivot-2026-06.md` §4/§8,
 `pi-webshop.md` §2–§5/§8, `piar-implementation-points.md` §7.
+
+### `vm_setup.sh`
+
+Setup día-1 de la VM (`lp-gpu-h100-x2-spot`) en UN comando, idempotente
+(re-correrlo tras un fallo parcial es seguro — cada paso skipea si ya está).
+Instala Miniforge + envs `piar` (3.12, training) y `webshop` (3.10, env +
+training encima, según `code/README.md`), baja los datasets por el **mirror
+HF** (el Drive oficial está muerto) + el **índice Lucene pre-construido**
+(ahorra horas de indexing), baja Qwen2.5-7B/1.5B con symlinks compatibles
+con los scripts del fork, y corre verificaciones finales (GPU count, import
+del env, self-test del harness). ~60-80 GB, 1-2 h.
+
+```bash
+# desde la máquina local: prender + auto-shutdown (una vez) + ssh
+az vm start -g RG-IAF-YTEC-poc-int -n lp-gpu-h100-x2-spot
+az vm auto-shutdown -g RG-IAF-YTEC-poc-int -n lp-gpu-h100-x2-spot --time 0600
+# en la VM:
+git clone https://github.com/lucaspecina/piar-rl.git && cd piar-rl
+git checkout pivot-2026-06
+tmux new -s setup
+bash tools/vm_setup.sh 2>&1 | tee ~/vm_setup.log
+```
+
+Supuestos no verificables desde Windows marcados en el script:
+`grep VERIFICAR-EN-VM tools/vm_setup.sh` (usuario admin, CUDA del host,
+ABI de flash-attn, subdir del índice). **Escrito en seco (2026-06-12), sin
+probar en Ubuntu real** — el primer run se supervisa por SSH.
+
+**Refs**: #16 (checklist día-1 + configs B1/B2 pre-registradas en comments).
